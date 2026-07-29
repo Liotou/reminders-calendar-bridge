@@ -352,10 +352,10 @@ private struct PairingDetail: View {
         }
         var actions: [String] = []
         if !pairing.reminderListName.isEmpty {
-            actions = [L.t("Marquer terminée : rcb://complete/5C1F…A93",
-                           "Mark as completed: rcb://complete/5C1F…A93"),
-                       L.t("Ouvrir dans Rappels : x-apple-reminderkit://REMCDReminder/5C1F…A93",
-                           "Open in Reminders: x-apple-reminderkit://REMCDReminder/5C1F…A93")]
+            actions = [L.t("Marquer terminée  rcb://complete/5C1FA93B",
+                           "Mark as completed  rcb://complete/5C1FA93B"),
+                       L.t("Ouvrir la tâche  rcb://open/5C1FA93B",
+                           "Open the task  rcb://open/5C1FA93B")]
         }
         var stats: [String] = []
         let title = L.t("Rédaction chapitre 2", "Writing chapter 2")

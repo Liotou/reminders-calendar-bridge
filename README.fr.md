@@ -187,9 +187,16 @@ tâche :
 
 ```
 ── Actions ──
-Marquer terminée : rcb://complete/5C1F…A93
-Ouvrir dans Rappels : x-apple-reminderkit://REMCDReminder/5C1F…A93
+Marquer terminée  rcb://complete/5C1FA93B
+Ouvrir la tâche  rcb://open/5C1FA93B
 ```
+
+Le champ Notes d'un événement est du **texte brut** : `EKEvent.notes` est une
+simple chaîne, sans API de texte enrichi. Calendrier y détecte les URL lui-même,
+un lien ne peut donc pas se cacher derrière un libellé. Les URL sont par
+conséquent réduites au minimum : les huit premiers caractères de l'UUID de la
+tâche suffisent à la désigner parmi les rappels des listes associées, et un
+jeton ambigu est refusé plutôt que deviné.
 
 `rcb://` est un schéma déclaré par l'application. Le clic la réveille, elle agit
 sur le rappel via EventKit, puis réécrit les événements qui en dépendent — le

@@ -185,6 +185,33 @@ final class Engine {
         scheduleScan(delay: 0)
     }
 
+    /// Retrouve un rappel depuis un identifiant complet ou depuis le jeton court
+    /// des liens d'action. La recherche par préfixe se limite aux listes
+    /// associées, ce qui rend une collision improbable et sans portée.
+    private func findReminder(_ token: String) -> EKReminder? {
+        if let exact = store.calendarItem(withIdentifier: token) as? EKReminder { return exact }
+
+        let lists = store.calendars(for: .reminder).filter { calendar in
+            config.pairings.contains { $0.enabled && $0.reminderListName == calendar.title }
+        }
+        guard !lists.isEmpty else { return nil }
+
+        var matches: [EKReminder] = []
+        let semaphore = DispatchSemaphore(value: 0)
+        store.fetchReminders(matching: store.predicateForReminders(in: lists)) { reminders in
+            matches = (reminders ?? []).filter { $0.calendarItemIdentifier.hasPrefix(token) }
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 20)
+
+        if matches.count > 1 {
+            log(L.t("Jeton ambigu (\(token)) : \(matches.count) tâches correspondent.",
+                    "Ambiguous token (\(token)): \(matches.count) tasks match."))
+            return nil
+        }
+        return matches.first
+    }
+
     /// Exécute un lien d'action cliqué depuis la description d'un événement.
     func perform(_ action: TaskAction, on taskID: String) {
         guard case .granted = reminderAccess else {
@@ -192,7 +219,7 @@ final class Engine {
                     "Action ignored: Reminders access not granted."))
             return
         }
-        guard let reminder = store.calendarItem(withIdentifier: taskID) as? EKReminder else {
+        guard let reminder = findReminder(taskID) else {
             log(L.t("Action impossible : tâche introuvable (\(taskID)).",
                     "Action failed: task not found (\(taskID))."))
             return
@@ -200,7 +227,9 @@ final class Engine {
 
         switch action {
         case .open:
-            if let url = URL(string: Self.reminderURL(taskID)) { NSWorkspace.shared.open(url) }
+            if let url = URL(string: Self.reminderURL(reminder.calendarItemIdentifier)) {
+                NSWorkspace.shared.open(url)
+            }
             return
         case .complete, .reopen:
             reminder.isCompleted = (action == .complete)

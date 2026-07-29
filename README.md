@@ -187,9 +187,16 @@ The last section of the description offers links that act on the task:
 
 ```
 ── Actions ──
-Mark as completed: rcb://complete/5C1F…A93
-Open in Reminders: x-apple-reminderkit://REMCDReminder/5C1F…A93
+Mark as completed  rcb://complete/5C1FA93B
+Open the task  rcb://open/5C1FA93B
 ```
+
+The Notes field of an event is **plain text** — `EKEvent.notes` is a plain
+`String`, with no rich-text API. Calendar detects URLs in that text itself, so a
+link cannot hide behind a label. The URLs are therefore kept as short as
+possible: the first eight characters of the task's UUID are enough to identify
+it among the reminders of the paired lists, and an ambiguous token is refused
+rather than guessed.
 
 `rcb://` is a scheme declared by this app. Clicking a link wakes it, it acts on
 the reminder through EventKit, then rewrites the events that depend on it — the
