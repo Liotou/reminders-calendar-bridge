@@ -9,8 +9,13 @@ enum ReminderDetails {
         var out: [String] = []
 
         append(&out, "Liste", reminder.calendar?.title)
-        append(&out, "Échéance", format(reminder.dueDateComponents))
-        append(&out, "Début", format(reminder.startDateComponents))
+
+        // Rappels recopie l'échéance dans la date de début : n'afficher « Début »
+        // que s'il porte réellement une autre information.
+        let due = format(reminder.dueDateComponents)
+        let begin = format(reminder.startDateComponents)
+        append(&out, "Échéance", due)
+        if begin != due { append(&out, "Début", begin) }
         append(&out, "Priorité", priority(reminder.priority))
         append(&out, "Lieu", reminder.location)
         append(&out, "Lien", reminder.url?.absoluteString)
