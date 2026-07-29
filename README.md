@@ -146,6 +146,58 @@ et chaque section peut être désactivée. Les lignes de séparation sont
 personnalisables : les modifier après coup empêche de retrouver les sections
 déjà écrites dans les événements existants.
 
+## Suivi des tâches modifiées
+
+Chaque événement écrit se termine par l'identifiant de sa tâche :
+
+```
+⟦rcb:5C1F…A93⟧
+```
+
+C'est ce lien qui rend le suivi possible. Si vous renommez un rappel, ou en
+changez l'échéance, la priorité ou les commentaires, tous les événements qui en
+dépendent sont mis à jour au prochain passage — titre compris. Une comparaison
+de titres ne le permettrait pas : après renommage, plus rien ne correspondrait.
+
+Les statistiques ne sont jamais perdues dans l'opération : elles ne sont pas
+stockées, elles sont recalculées depuis le calendrier à chaque écriture. Les
+notes personnelles, elles, sont reprises mot pour mot.
+
+Le rattachement se fait dans cet ordre : identifiant inscrit dans la note, puis
+fichier d'état local, puis comparaison de titres. L'identifiant peut être
+désactivé par association, au prix du suivi des renommages.
+
+**Tâche terminée** — dès qu'un rappel est coché, le titre de ses événements est
+précédé d'un marqueur (`✅` par défaut, modifiable ou supprimable par
+association). Décocher la tâche le retire.
+
+## Langue
+
+Français et anglais, au choix dans l'onglet Général, ou selon la langue du
+système. Le réglage porte aussi bien sur l'interface que sur le texte écrit dans
+les descriptions d'événements.
+
+## Mises à jour
+
+L'application interroge les publications GitHub de ce dépôt, au plus une fois
+par jour, et signale l'existence d'une version plus récente. Rien n'est installé
+sans votre accord.
+
+L'application étant signée en ad-hoc, il n'y a pas de certificat de développeur
+à vérifier. Le lien de confiance repose donc sur trois points : le dépôt est
+figé dans le code, l'échange se fait en HTTPS, et l'archive téléchargée doit
+présenter une signature intacte et le même identifiant de bundle que
+l'application en place. L'ancienne version est conservée le temps du
+remplacement et remise en place en cas d'échec.
+
+Pour publier une version : porter le nouveau numéro dans `CFBundleShortVersionString`
+(Info.plist), construire, puis
+
+```
+ditto -c -k --sequesterRsrc --keepParent /Applications/RemindersCalendarBridge.app RemindersCalendarBridge.zip
+gh release create vX.Y.Z RemindersCalendarBridge.zip --title vX.Y.Z --notes "…"
+```
+
 ## Signature et autorisations
 
 `build.sh` signe l'application en ad-hoc, ce qui suffit à TCC et à l'ouverture
