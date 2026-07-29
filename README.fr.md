@@ -154,7 +154,7 @@ Chaque événement écrit porte un lien vers son rappel dans le champ **Lieu ou
 appel vidéo** :
 
 ```
-x-apple-reminder://5C1F…A93
+x-apple-reminderkit://REMCDReminder/5C1F…A93
 ```
 
 Calendrier l'affiche comme un lien cliquable : la tâche s'ouvre dans Rappels

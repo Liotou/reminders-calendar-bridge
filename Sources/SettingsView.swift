@@ -15,7 +15,23 @@ struct SettingsView: View {
                 .tabItem { Label(L.t("Journal", "Log"), systemImage: "list.bullet.rectangle") }
         }
         .frame(width: 700, height: 580)
-        .onAppear { engine.refreshSources() }
+        .onAppear {
+            engine.refreshSources()
+            Self.bringToFront()
+        }
+    }
+
+    /// Sans icône dans le Dock (`LSUIElement`), l'application n'est pas activée
+    /// quand sa fenêtre s'ouvre : celle-ci apparaît derrière l'application au
+    /// premier plan. On active donc explicitement, une fois la fenêtre créée.
+    private static func bringToFront() {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.keyWindow?.makeKeyAndOrderFront(nil)
+            NSApp.windows
+                .first { $0.isVisible && $0.canBecomeKey }?
+                .makeKeyAndOrderFront(nil)
+        }
     }
 }
 
@@ -344,8 +360,8 @@ private struct PairingDetail: View {
 
         var text = ""
         if pairing.linkReminderInLocation && !pairing.reminderListName.isEmpty {
-            text += L.t("Lieu : x-apple-reminder://5C1F…A93\n\n",
-                        "Location: x-apple-reminder://5C1F…A93\n\n")
+            text += L.t("Lieu : x-apple-reminderkit://REMCDReminder/5C1F…A93\n\n",
+                        "Location: x-apple-reminderkit://REMCDReminder/5C1F…A93\n\n")
         }
         text += NotesComposer(pairing: pairing)
             .compose(existing: "", taskInfo: taskInfo, stats: stats)

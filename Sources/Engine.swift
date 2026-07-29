@@ -327,7 +327,12 @@ final class Engine {
                 // changé depuis la dernière fois — titre, contenu, achèvement.
                 let isNew = record == nil && !state.seen.contains(id)
                 let changed = record != nil && record?.fingerprint != fingerprint
-                guard isNew || changed else {
+                // Lien écrit par une version antérieure, avec le schéma que
+                // macOS n'ouvre pas : il faut le remplacer.
+                let staleLink = pairing.linkReminderInLocation && task != nil
+                    && (event.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+                        .hasPrefix(Self.legacyReminderScheme)
+                guard isNew || changed || staleLink else {
                     if let task { result.records[id] = EventRecord(reminderId: task.id, fingerprint: fingerprint) }
                     continue
                 }
@@ -401,18 +406,24 @@ final class Engine {
     nonisolated private static let idPrefix = "⟦rcb:"
     nonisolated private static let idSuffix = "⟧"
 
-    /// Schéma d'URL de Rappels. Le lien ouvre la tâche, et son identifiant est
-    /// celui qu'EventKit expose sous `calendarItemIdentifier`.
-    nonisolated static let reminderScheme = "x-apple-reminder://"
+    /// Schéma d'URL de Rappels. C'est `x-apple-reminderkit` qui est enregistré
+    /// auprès de macOS — voir `CFBundleURLSchemes` dans Reminders.app. AppleScript
+    /// renvoie de son côté des identifiants en `x-apple-reminder://`, que rien
+    /// n'ouvre : cette forme n'est reconnue ici que pour relire les événements
+    /// écrits par une version antérieure.
+    nonisolated static let reminderScheme = "x-apple-reminderkit://REMCDReminder/"
+    nonisolated static let legacyReminderScheme = "x-apple-reminder://"
 
     nonisolated static func reminderURL(_ id: String) -> String { reminderScheme + id }
 
     nonisolated static func taskID(inLocation location: String?) -> String? {
         guard let location else { return nil }
         let trimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix(reminderScheme) else { return nil }
-        let id = String(trimmed.dropFirst(reminderScheme.count))
-        return id.isEmpty ? nil : id
+        for scheme in [reminderScheme, legacyReminderScheme] where trimmed.hasPrefix(scheme) {
+            let id = String(trimmed.dropFirst(scheme.count))
+            if !id.isEmpty { return id }
+        }
+        return nil
     }
 
     nonisolated static func embeddedTaskID(in notes: String?) -> String? {

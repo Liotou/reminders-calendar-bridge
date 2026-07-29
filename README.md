@@ -155,7 +155,7 @@ Every written event carries a link to its reminder in the **Location or Video
 Call** field:
 
 ```
-x-apple-reminder://5C1F…A93
+x-apple-reminderkit://REMCDReminder/5C1F…A93
 ```
 
 Calendar renders it as a clickable link, so the task opens in Reminders in one
