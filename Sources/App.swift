@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             Engine.shared.start()
+            Updater.shared.checkIfDue()
         }
     }
 }
@@ -16,18 +17,24 @@ struct RemindersCalendarBridgeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var engine = Engine.shared
     @State private var store = ConfigStore.shared
+    @State private var updater = Updater.shared
 
     var body: some Scene {
         MenuBarExtra {
             Text(engine.lastActivity)
-            Text("\(engine.processedCount) événement(s) suivi(s)")
+            Text(L.t("\(engine.processedCount) événement(s) suivi(s)",
+                     "\(engine.processedCount) tracked event(s)"))
+            if case .available(let version, _, _) = updater.state {
+                Divider()
+                Text(L.t("Version \(version) disponible", "Version \(version) available"))
+            }
             Divider()
-            Toggle("Surveillance active", isOn: $store.config.enabled)
-            Button("Analyser maintenant") { engine.scanNow() }
+            Toggle(L.t("Surveillance active", "Watching enabled"), isOn: $store.config.enabled)
+            Button(L.t("Analyser maintenant", "Scan now")) { engine.scanNow() }
             Divider()
-            SettingsLink { Text("Réglages…") }
+            SettingsLink { Text(L.t("Réglages…", "Settings…")) }
                 .keyboardShortcut(",", modifiers: .command)
-            Button("Quitter") { NSApplication.shared.terminate(nil) }
+            Button(L.t("Quitter", "Quit")) { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q", modifiers: .command)
         } label: {
             Image(systemName: store.config.enabled ? "calendar.badge.clock" : "calendar")

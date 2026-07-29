@@ -8,13 +8,13 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralTab(store: store, engine: engine)
-                .tabItem { Label("Général", systemImage: "gearshape") }
+                .tabItem { Label(L.t("Général", "General"), systemImage: "gearshape") }
             PairingsTab(store: store, engine: engine)
-                .tabItem { Label("Associations", systemImage: "arrow.triangle.branch") }
+                .tabItem { Label(L.t("Associations", "Pairings"), systemImage: "arrow.triangle.branch") }
             LogTab(engine: engine)
-                .tabItem { Label("Journal", systemImage: "list.bullet.rectangle") }
+                .tabItem { Label(L.t("Journal", "Log"), systemImage: "list.bullet.rectangle") }
         }
-        .frame(width: 700, height: 560)
+        .frame(width: 700, height: 580)
         .onAppear { engine.refreshSources() }
     }
 }
@@ -24,6 +24,7 @@ struct SettingsView: View {
 private struct GeneralTab: View {
     @Bindable var store: ConfigStore
     var engine: Engine
+    @State private var updater = Updater.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     @State private var confirmReprocess = false
@@ -31,50 +32,99 @@ private struct GeneralTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Surveillance active", isOn: $store.config.enabled)
-                Toggle("Lancer au démarrage de la session", isOn: $launchAtLogin)
+                Toggle(L.t("Surveillance active", "Watching enabled"), isOn: $store.config.enabled)
+                Toggle(L.t("Lancer au démarrage de la session", "Launch at login"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, wanted in setLaunchAtLogin(wanted) }
                 if let loginError {
                     Text(loginError).font(.caption).foregroundStyle(Color.red)
                 }
+                Picker(L.t("Langue", "Language"), selection: $store.config.language) {
+                    ForEach(Language.allCases) { Text($0.label).tag($0) }
+                }
             }
 
-            Section("Fenêtres d'analyse") {
-                Stepper("Détection : ±\(store.config.detectionDays) jours",
+            Section(L.t("Fenêtres d'analyse", "Analysis windows")) {
+                Stepper(L.t("Détection : ±\(store.config.detectionDays) jours",
+                            "Detection: ±\(store.config.detectionDays) days"),
                         value: $store.config.detectionDays, in: 1...365)
-                Stepper("Historique pris en compte : \(store.config.historyYears) ans",
+                Stepper(L.t("Historique pris en compte : \(store.config.historyYears) ans",
+                            "History depth: \(store.config.historyYears) years"),
                         value: $store.config.historyYears, in: 1...30)
-                Text("Communes à toutes les associations.")
+                Text(L.t("Communes à toutes les associations.", "Shared by every pairing."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("État") {
-                LabeledContent("Calendrier", value: accessLabel(engine.calendarAccess))
-                LabeledContent("Rappels", value: accessLabel(engine.reminderAccess))
-                LabeledContent("Événements suivis", value: "\(engine.processedCount)")
-                LabeledContent("Dernière activité", value: engine.lastActivity)
+            Section(L.t("État", "Status")) {
+                LabeledContent(L.t("Calendrier", "Calendar"), value: accessLabel(engine.calendarAccess))
+                LabeledContent(L.t("Rappels", "Reminders"), value: accessLabel(engine.reminderAccess))
+                LabeledContent(L.t("Événements suivis", "Tracked events"), value: "\(engine.processedCount)")
+                LabeledContent(L.t("Dernière activité", "Last activity"), value: engine.lastActivity)
                 HStack {
-                    Button("Analyser maintenant") { engine.scanNow() }
-                    Button("Oublier l'état") { engine.forgetState() }
-                    Button("Retraiter tout l'historique") { confirmReprocess = true }
+                    Button(L.t("Analyser maintenant", "Scan now")) { engine.scanNow() }
+                    Button(L.t("Oublier l'état", "Forget state")) { engine.forgetState() }
+                    Button(L.t("Retraiter tout l'historique", "Reprocess everything")) { confirmReprocess = true }
+                }
+            }
+
+            Section(L.t("Mises à jour", "Updates")) {
+                LabeledContent(L.t("Version installée", "Installed version"), value: updater.currentVersion)
+                Toggle(L.t("Vérifier automatiquement", "Check automatically"),
+                       isOn: $store.config.checkForUpdates)
+                updateStatus
+                HStack {
+                    Button(L.t("Vérifier maintenant", "Check now")) { updater.check() }
+                    if case .available = updater.state {
+                        Button(L.t("Installer et relancer", "Install and relaunch")) { updater.install() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Link(L.t("Voir les publications", "View releases"), destination: Updater.releasesURL)
                 }
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Retraiter tout l'historique ?", isPresented: $confirmReprocess) {
-            Button("Retraiter", role: .destructive) { engine.reprocessAll() }
-            Button("Annuler", role: .cancel) {}
+        .onAppear { updater.checkIfDue() }
+        .confirmationDialog(L.t("Retraiter tout l'historique ?", "Reprocess everything?"),
+                            isPresented: $confirmReprocess) {
+            Button(L.t("Retraiter", "Reprocess"), role: .destructive) { engine.reprocessAll() }
+            Button(L.t("Annuler", "Cancel"), role: .cancel) {}
         } message: {
-            Text("Les sections « Informations de la tâche » et « Statistiques » seront réécrites sur tous les événements des calendriers associés, dans la fenêtre de détection. Les notes personnelles sont préservées.")
+            Text(L.t("Les sections « Informations de la tâche » et « Statistiques » seront réécrites sur tous les événements des calendriers associés, dans la fenêtre de détection. Les notes personnelles sont préservées.",
+                     "The “Task information” and “Statistics” sections will be rewritten on every event of the paired calendars, within the detection window. Personal notes are preserved."))
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatus: some View {
+        switch updater.state {
+        case .idle:
+            EmptyView()
+        case .checking:
+            Text(L.t("Vérification en cours…", "Checking…")).font(.caption).foregroundStyle(.secondary)
+        case .upToDate:
+            Text(L.t("Vous disposez de la dernière version.", "You are up to date."))
+                .font(.caption).foregroundStyle(.secondary)
+        case .available(let version, _, let notes):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L.t("Version \(version) disponible.", "Version \(version) available."))
+                    .font(.caption).bold()
+                if !notes.isEmpty {
+                    Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                }
+            }
+        case .installing:
+            Text(L.t("Téléchargement et installation…", "Downloading and installing…"))
+                .font(.caption).foregroundStyle(.secondary)
+        case .failed(let reason):
+            Text(reason).font(.caption).foregroundStyle(Color.red)
         }
     }
 
     private func accessLabel(_ state: AccessState) -> String {
         switch state {
-        case .unknown: "en attente"
-        case .granted: "accordé"
-        case .denied(let reason): "refusé — \(reason)"
+        case .unknown: L.t("en attente", "pending")
+        case .granted: L.t("accordé", "granted")
+        case .denied(let reason): L.t("refusé — \(reason)", "denied — \(reason)")
         }
     }
 
@@ -111,10 +161,10 @@ private struct PairingsTab: View {
                                 .toggleStyle(.checkbox)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(pairing.reminderListName.isEmpty
-                                     ? "Toutes les entrées" : pairing.reminderListName)
+                                     ? L.t("Toutes les entrées", "All entries") : pairing.reminderListName)
                                     .lineLimit(1)
                                 Text(pairing.calendarName.isEmpty
-                                     ? "(aucun calendrier)" : pairing.calendarName)
+                                     ? L.t("(aucun calendrier)", "(no calendar)") : pairing.calendarName)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -150,9 +200,11 @@ private struct PairingsTab: View {
                 if let index = store.config.pairings.firstIndex(where: { $0.id == selection }) {
                     PairingDetail(pairing: $store.config.pairings[index], engine: engine)
                 } else {
-                    ContentUnavailableView("Aucune association sélectionnée",
-                                           systemImage: "arrow.triangle.branch",
-                                           description: Text("Chaque association relie une liste de rappels à un calendrier, avec sa propre mise en forme."))
+                    ContentUnavailableView(
+                        L.t("Aucune association sélectionnée", "No pairing selected"),
+                        systemImage: "arrow.triangle.branch",
+                        description: Text(L.t("Chaque association relie une liste de rappels à un calendrier, avec sa propre mise en forme.",
+                                              "Each pairing links a reminder list to a calendar, with its own formatting.")))
                 }
             }
             .frame(minWidth: 380)
@@ -167,29 +219,46 @@ private struct PairingDetail: View {
 
     var body: some View {
         Form {
-            Section("Sources") {
-                Picker("Liste de rappels", selection: $pairing.reminderListName) {
-                    Text("Aucune (tous les événements)").tag("")
+            Section(L.t("Sources", "Sources")) {
+                Picker(L.t("Liste de rappels", "Reminder list"), selection: $pairing.reminderListName) {
+                    Text(L.t("Aucune (tous les événements)", "None (every event)")).tag("")
                     ForEach(options(engine.availableReminderLists, pairing.reminderListName), id: \.self) {
                         Text($0).tag($0)
                     }
                 }
-                Picker("Calendrier", selection: $pairing.calendarName) {
+                Picker(L.t("Calendrier", "Calendar"), selection: $pairing.calendarName) {
                     ForEach(options(engine.availableCalendars, pairing.calendarName), id: \.self) {
                         Text($0).tag($0)
                     }
                 }
-                Toggle("Tolérer un suffixe après le titre de la tâche",
+                Toggle(L.t("Tolérer un suffixe après le titre de la tâche",
+                           "Allow a suffix after the task title"),
                        isOn: $pairing.looseTitleMatch)
                     .disabled(pairing.reminderListName.isEmpty)
-                Text("Le glisser-déposer d'un rappel ajoute sa note au titre. Le titre de l'événement est ensuite ramené à celui de la tâche.")
+                Text(L.t("Le glisser-déposer d'un rappel ajoute sa note au titre. Le titre de l'événement est ensuite ramené à celui de la tâche.",
+                         "Dragging a reminder appends its notes to the title. The event title is then reduced to the task title."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Sections de la description") {
-                // L'ordre du tableau est l'ordre d'écriture : on le change par
-                // glissement.
+            Section(L.t("Suivi de la tâche", "Task tracking")) {
+                Toggle(L.t("Inscrire l'identifiant de la tâche en fin de note",
+                           "Write the task identifier at the end of the notes"),
+                       isOn: $pairing.embedTaskIdentifier)
+                    .disabled(pairing.reminderListName.isEmpty)
+                Text(L.t("C'est ce lien qui permet de suivre une tâche dont le titre change ensuite, et de répercuter la modification sur toutes ses séances.",
+                         "This link is what lets a task be followed after its title changes, and the change propagated to every one of its sessions."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(L.t("Marqueur de tâche terminée", "Completed task marker"),
+                          text: $pairing.completedPrefix)
+                Text(L.t("Apposé devant le titre des événements dès que la tâche est cochée dans Rappels. Laissez vide pour ne rien ajouter.",
+                         "Prepended to event titles as soon as the task is ticked in Reminders. Leave empty to add nothing."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(L.t("Sections de la description", "Description sections")) {
                 // Ces lignes sont déplaçables : sur macOS, toute la ligne est la
                 // poignée de glissement. On n'y met donc aucun champ de saisie,
                 // que le geste de glissement rendrait inutilisable.
@@ -206,31 +275,34 @@ private struct PairingDetail: View {
                 }
                 .frame(height: 96)
                 .listStyle(.plain)
-                Text("Glissez les lignes pour changer l'ordre. La section « Notes personnelles » n'est jamais réécrite.")
+                Text(L.t("Glissez les lignes pour changer l'ordre. La section « Notes personnelles » n'est jamais réécrite.",
+                         "Drag rows to reorder. The “Personal notes” section is never rewritten."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("Lignes de séparation") {
+            Section(L.t("Lignes de séparation", "Section headers")) {
                 ForEach($pairing.sections) { $setting in
                     TextField(setting.section.label, text: $setting.marker)
                 }
-                Text("Elles délimitent les sections dans la description. Les modifier après coup empêche de retrouver celles déjà écrites dans les événements existants.")
+                Text(L.t("Elles délimitent les sections dans la description. Les modifier après coup empêche de retrouver celles déjà écrites dans les événements existants.",
+                         "They delimit the sections. Changing them afterwards prevents already written sections from being found in existing events."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextField("Texte initial des notes personnelles", text: $pairing.personalPlaceholder)
+                TextField(L.t("Texte initial des notes personnelles", "Initial text of personal notes"),
+                          text: $pairing.personalPlaceholder)
             }
 
-            Section("Statistiques") {
-                Toggle("Numéro de session", isOn: $pairing.showSessionNumber)
-                Toggle("Durée de la session courante", isOn: $pairing.showCurrentDuration)
-                Toggle("Nombre et durée des sessions antérieures", isOn: $pairing.showPreviousTotal)
-                Toggle("Date de la dernière séance", isOn: $pairing.showLastSessionDate)
-                Toggle("Cumul total", isOn: $pairing.showGrandTotal)
-                Toggle("Conserver le texte libre existant", isOn: $pairing.preserveExistingNotes)
+            Section(L.t("Statistiques", "Statistics")) {
+                Toggle(L.t("Numéro de session", "Session number"), isOn: $pairing.showSessionNumber)
+                Toggle(L.t("Durée de la session courante", "Current session duration"), isOn: $pairing.showCurrentDuration)
+                Toggle(L.t("Nombre et durée des sessions antérieures", "Count and duration of earlier sessions"), isOn: $pairing.showPreviousTotal)
+                Toggle(L.t("Date de la dernière séance", "Date of the last session"), isOn: $pairing.showLastSessionDate)
+                Toggle(L.t("Cumul total", "Grand total"), isOn: $pairing.showGrandTotal)
+                Toggle(L.t("Conserver le texte libre existant", "Keep existing free text"), isOn: $pairing.preserveExistingNotes)
             }
 
-            Section("Aperçu") {
+            Section(L.t("Aperçu", "Preview")) {
                 Text(preview)
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
@@ -249,20 +321,25 @@ private struct PairingDetail: View {
     private var preview: String {
         var taskInfo: [String] = []
         if !pairing.reminderListName.isEmpty {
-            taskInfo = ["Liste : \(pairing.reminderListName)",
-                        "Échéance : 14 septembre 2026",
-                        "Priorité : haute",
-                        "Commentaires : voir le compte rendu du 3 juillet"]
+            taskInfo = ["\(L.t("Liste", "List")) : \(pairing.reminderListName)",
+                        "\(L.t("Échéance", "Due")) : \(L.t("14 septembre 2026", "September 14, 2026"))",
+                        "\(L.t("Priorité", "Priority")) : \(L.t("haute", "high"))",
+                        "\(L.t("Commentaires", "Notes")) : \(L.t("voir le compte rendu du 3 juillet", "see the July 3 minutes"))"]
         }
         var stats: [String] = []
-        if pairing.showSessionNumber { stats.append("Session n°8 — « Rédaction chapitre 2 »") }
-        if pairing.showCurrentDuration { stats.append("Cette session : 2 h 30") }
-        if pairing.showPreviousTotal { stats.append("Sessions antérieures : 7 — 14 h 15") }
-        if pairing.showLastSessionDate { stats.append("Dernière séance : 22 juillet 2026") }
-        if pairing.showGrandTotal { stats.append("Cumul : 16 h 45") }
+        let title = L.t("Rédaction chapitre 2", "Writing chapter 2")
+        if pairing.showSessionNumber { stats.append(L.t("Session n°8 — « \(title) »", "Session #8 — “\(title)”")) }
+        if pairing.showCurrentDuration { stats.append(L.t("Cette session : 2 h 30", "This session: 2 h 30")) }
+        if pairing.showPreviousTotal { stats.append(L.t("Sessions antérieures : 7 — 14 h 15", "Earlier sessions: 7 — 14 h 15")) }
+        if pairing.showLastSessionDate { stats.append(L.t("Dernière séance : 22 juillet 2026", "Last session: July 22, 2026")) }
+        if pairing.showGrandTotal { stats.append(L.t("Cumul : 16 h 45", "Total: 16 h 45")) }
 
-        return NotesComposer(pairing: pairing)
+        var text = NotesComposer(pairing: pairing)
             .compose(existing: "", taskInfo: taskInfo, stats: stats)
+        if pairing.embedTaskIdentifier && !pairing.reminderListName.isEmpty {
+            text += "\n\n⟦rcb:5C1F…A93⟧"
+        }
+        return text
     }
 }
 
@@ -287,11 +364,11 @@ private struct LogTab: View {
             .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
 
             HStack {
-                Text("Journal complet : ~/Library/Application Support/RemindersCalendarBridge/")
+                Text("~/Library/Application Support/RemindersCalendarBridge/")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Révéler dans le Finder") {
+                Button(L.t("Révéler dans le Finder", "Reveal in Finder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([Engine.logURL])
                 }
             }

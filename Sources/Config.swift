@@ -38,6 +38,15 @@ struct SectionSetting: Codable, Equatable, Identifiable, Sendable {
         self.enabled = enabled
         self.marker = marker ?? section.defaultMarker
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        section = try c.decode(NoteSection.self, forKey: .section)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        marker = try c.decodeIfPresent(String.self, forKey: .marker) ?? section.defaultMarker
+    }
+
+    enum CodingKeys: String, CodingKey { case section, enabled, marker }
 }
 
 /// Association d'un calendrier et d'une liste de rappels, avec sa propre mise
@@ -53,6 +62,11 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
     var reminderListName = ""
 
     var looseTitleMatch = true
+    /// Préfixe apposé au titre de l'événement quand la tâche est terminée.
+    var completedPrefix = "✅"
+    /// Inscrit l'identifiant de la tâche en fin de note : c'est ce qui permet de
+    /// suivre un rappel dont le titre change.
+    var embedTaskIdentifier = true
 
     var sections: [SectionSetting] = NoteSection.allCases.map { SectionSetting($0) }
     var personalPlaceholder = ""
@@ -69,6 +83,39 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
         let list = reminderListName.isEmpty ? "toutes les entrées" : reminderListName
         let cal = calendarName.isEmpty ? "(aucun calendrier)" : calendarName
         return "\(list)  →  \(cal)"
+    }
+
+    init() {}
+
+    /// Décodage tolérant, indispensable : le décodeur synthétisé par Swift
+    /// n'applique pas les valeurs par défaut et échoue sur une clé absente —
+    /// une seule propriété ajoutée invaliderait tout le réglage enregistré.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Pairing()
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
+        calendarName = try c.decodeIfPresent(String.self, forKey: .calendarName) ?? d.calendarName
+        reminderListName = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? d.reminderListName
+        looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? d.looseTitleMatch
+        completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? d.completedPrefix
+        embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? d.embedTaskIdentifier
+        sections = try c.decodeIfPresent([SectionSetting].self, forKey: .sections) ?? d.sections
+        personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? d.personalPlaceholder
+        preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? d.preserveExistingNotes
+        showSessionNumber = try c.decodeIfPresent(Bool.self, forKey: .showSessionNumber) ?? d.showSessionNumber
+        showCurrentDuration = try c.decodeIfPresent(Bool.self, forKey: .showCurrentDuration) ?? d.showCurrentDuration
+        showPreviousTotal = try c.decodeIfPresent(Bool.self, forKey: .showPreviousTotal) ?? d.showPreviousTotal
+        showLastSessionDate = try c.decodeIfPresent(Bool.self, forKey: .showLastSessionDate) ?? d.showLastSessionDate
+        showGrandTotal = try c.decodeIfPresent(Bool.self, forKey: .showGrandTotal) ?? d.showGrandTotal
+        normalizeSections()
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, enabled, calendarName, reminderListName, looseTitleMatch
+        case completedPrefix, embedTaskIdentifier, sections, personalPlaceholder
+        case preserveExistingNotes, showSessionNumber, showCurrentDuration
+        case showPreviousTotal, showLastSessionDate, showGrandTotal
     }
 
     func marker(for section: NoteSection) -> String {
@@ -93,14 +140,17 @@ struct Config: Codable, Equatable, Sendable {
     var enabled = true
     var detectionDays = 60
     var historyYears = 10
+    var language: Language = .system
+    var checkForUpdates = true
     var pairings: [Pairing] = []
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
-        case enabled, detectionDays, historyYears, pairings
+        case enabled, detectionDays, historyYears, pairings, language, checkForUpdates
         // Clés de l'ancien format, à couple unique.
         case calendarName, reminderListName, requireReminderMatch, looseTitleMatch
+        case completedPrefix, embedTaskIdentifier
         case marker, taskInfoMarker, personalMarker
         case showTaskInfo, includePersonalSection, personalPlaceholder, preserveExistingNotes
         case showSessionNumber, showCurrentDuration, showPreviousTotal
@@ -116,6 +166,8 @@ struct Config: Codable, Equatable, Sendable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
         detectionDays = try c.decodeIfPresent(Int.self, forKey: .detectionDays) ?? d.detectionDays
         historyYears = try c.decodeIfPresent(Int.self, forKey: .historyYears) ?? d.historyYears
+        language = try c.decodeIfPresent(Language.self, forKey: .language) ?? d.language
+        checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
 
         if let decoded = try c.decodeIfPresent([Pairing].self, forKey: .pairings) {
             pairings = decoded.map { var p = $0; p.normalizeSections(); return p }
@@ -129,6 +181,8 @@ struct Config: Codable, Equatable, Sendable {
         let list = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? ""
         p.reminderListName = requireMatch ? list : ""
         p.looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? p.looseTitleMatch
+        p.completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? p.completedPrefix
+        p.embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? p.embedTaskIdentifier
         p.personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? ""
         p.preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? true
         p.showSessionNumber = try c.decodeIfPresent(Bool.self, forKey: .showSessionNumber) ?? true
@@ -154,6 +208,8 @@ struct Config: Codable, Equatable, Sendable {
         try c.encode(enabled, forKey: .enabled)
         try c.encode(detectionDays, forKey: .detectionDays)
         try c.encode(historyYears, forKey: .historyYears)
+        try c.encode(language, forKey: .language)
+        try c.encode(checkForUpdates, forKey: .checkForUpdates)
         try c.encode(pairings, forKey: .pairings)
     }
 }
@@ -168,6 +224,7 @@ final class ConfigStore {
     var config: Config {
         didSet {
             guard config != oldValue else { return }
+            L.current = config.language
             save()
             Engine.shared.configDidChange(config)
         }
@@ -180,6 +237,7 @@ final class ConfigStore {
         } else {
             config = Config()
         }
+        L.current = config.language
     }
 
     private func save() {
