@@ -33,33 +33,51 @@ Menu de la barre de menus → **Réglages…**
 
 **Général**
 - Surveillance active / lancement à l'ouverture de session
-- Calendrier surveillé (liste déroulante des calendriers réels)
-- Liste de rappels servant de filtre, et possibilité de désactiver ce filtre
-- Fenêtre de détection (±N jours) et profondeur d'historique (N années)
+- Fenêtre de détection (±N jours) et profondeur d'historique (N années),
+  communes à toutes les associations
 - État des autorisations, nombre d'événements suivis, dernière activité
 - **Analyser maintenant**, **Oublier l'état**, **Retraiter tout l'historique**
 
-**Format**
-- Sections à inclure : informations de la tâche, notes personnelles protégées
-- Choix ligne par ligne du contenu des statistiques, avec aperçu en direct
-- Lignes de séparation personnalisables
-- Conservation ou remplacement des notes existantes
+**Associations** — voir ci-dessous.
 
 **Journal** — les 200 dernières lignes, et accès au fichier complet.
+
+## Associations
+
+Une association relie **une liste de rappels à un calendrier**. Il peut y en
+avoir autant que voulu, et chacune a sa propre mise en forme :
+
+```
+Doctorat - Tâches           →  Sessions de travail
+Doctorat - Tâches de lecture →  Sessions de lecture
+```
+
+Un même calendrier peut apparaître dans plusieurs associations. Une liste vide
+(« Aucune ») traite tous les événements du calendrier et les regroupe sur leur
+propre titre, sans passer par Rappels.
+
+Chaque association définit :
+
+- la tolérance à un suffixe après le titre de la tâche ;
+- **les sections de la description, leur ordre et leurs libellés** — l'ordre se
+  change en glissant les lignes ;
+- le texte initial de la section personnelle ;
+- le contenu du bloc de statistiques, ligne par ligne ;
+
+avec un aperçu en direct du résultat.
 
 ## Fonctionnement
 
 1. À chaque notification (regroupée sur 2 s pour absorber les rafales iCloud),
-   les événements du calendrier sur la fenêtre de détection sont listés.
+   les événements de chaque association sont listés sur la fenêtre de détection.
 2. Ils sont comparés à `~/Library/Application Support/SessionsStats/state.json`,
    qui retient les identifiants déjà traités. La détection ne repose donc pas
    sur la date de création : un événement est « nouveau » au moment où il
    apparaît sur le Mac, quel qu'ait été le délai de synchronisation.
-3. Pour chaque nouvel événement de titre X, si le filtre Rappels est actif, un
-   rappel de titre X doit exister dans la liste choisie (terminé ou non) ; sinon
-   l'événement est ignoré.
+3. Pour chaque nouvel événement de titre X, un rappel de titre X doit exister
+   dans la liste associée (terminé ou non) ; sinon l'événement est ignoré.
 4. Les événements de même titre qui se terminent avant le début de la session
-   courante sont comptés, leurs durées sommées, et le bloc est écrit.
+   courante sont comptés, leurs durées sommées, et les sections sont écrites.
 
 Le rapprochement des titres est insensible à la casse, aux accents et aux
 espaces superflus.
@@ -73,8 +91,8 @@ celui de la tâche **suivi du contenu de sa note**. L'application gère ce cas :
   tâche malgré le suffixe (« Tolérer un suffixe après le titre de la tâche ») ;
 - le regroupement se fait sur le titre de la **tâche**, sans quoi une même
   activité serait comptée séparément selon que le suffixe est présent ou non ;
-- le titre de l'événement est ramené à celui de la tâche (« Nettoyer le titre de
-  l'événement ») ;
+- le titre de l'événement est ramené à celui de la tâche, tel qu'il figure dans
+  Rappels ;
 - le contenu de la note n'est pas récupéré depuis le titre : il est reconstitué
   proprement depuis les propriétés du rappel, dans la section « Informations de
   la tâche » décrite ci-dessous.
@@ -117,9 +135,10 @@ y est versé au premier passage, plutôt que d'être écrasé.
 
 **Statistiques** — régénérée à chaque passage.
 
-Chaque section est délimitée par sa ligne de séparation, personnalisable dans
-l'onglet Format. Les modifier après coup empêche de retrouver les sections déjà
-écrites dans les événements existants.
+L'ordre des trois sections se règle par glissement, association par association,
+et chaque section peut être désactivée. Les lignes de séparation sont
+personnalisables : les modifier après coup empêche de retrouver les sections
+déjà écrites dans les événements existants.
 
 ## Signature et autorisations
 

@@ -1,83 +1,160 @@
 import Foundation
 import Observation
 
-/// Réglages de l'application, persistés en JSON dans les préférences utilisateur.
-struct Config: Codable, Equatable {
+/// Les trois sections que peut porter la description d'un événement.
+enum NoteSection: String, Codable, CaseIterable, Identifiable, Sendable {
+    case taskInfo, personal, stats
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .taskInfo: "Informations de la tâche"
+        case .personal: "Notes personnelles"
+        case .stats: "Statistiques"
+        }
+    }
+
+    var defaultMarker: String {
+        switch self {
+        case .taskInfo: "── Informations de la tâche ──"
+        case .personal: "── Notes personnelles ──"
+        case .stats: "── Statistiques ──"
+        }
+    }
+}
+
+/// Une section dans l'ordre voulu, activée ou non. L'ordre du tableau *est*
+/// l'ordre d'écriture dans la description.
+struct SectionSetting: Codable, Equatable, Identifiable, Sendable {
+    var section: NoteSection
+    var enabled: Bool = true
+    var marker: String
+
+    var id: NoteSection { section }
+
+    init(_ section: NoteSection, enabled: Bool = true, marker: String? = nil) {
+        self.section = section
+        self.enabled = enabled
+        self.marker = marker ?? section.defaultMarker
+    }
+}
+
+/// Association d'un calendrier et d'une liste de rappels, avec sa propre mise
+/// en forme. Plusieurs associations coexistent : « Doctorat - Tâches » vers
+/// « Sessions de travail », « Doctorat - Tâches de lecture » vers « Sessions de
+/// lecture », etc.
+struct Pairing: Codable, Equatable, Identifiable, Sendable {
+    var id = UUID()
     var enabled = true
+    var calendarName = ""
+    /// Vide : aucun filtre, tous les événements du calendrier sont traités et
+    /// regroupés sur leur propre titre.
+    var reminderListName = ""
 
-    // Sources
-    var calendarName = "Sessions de travail"
-    var requireReminderMatch = true
-    var reminderListName = "Doctorat - Tâches"
-    /// Le titre de l'événement peut porter un suffixe après celui de la tâche
-    /// (une date recopiée, par exemple). Le regroupement se fait alors sur le
-    /// titre de la tâche.
     var looseTitleMatch = true
-    /// Le glisser-déposer d'un rappel recopie sa note dans le titre de
-    /// l'événement : on ramène le titre à celui de la tâche.
-    var cleanEventTitle = true
 
-    // Fenêtres d'analyse
-    var detectionDays = 60
-    var historyYears = 10
+    var sections: [SectionSetting] = NoteSection.allCases.map { SectionSetting($0) }
+    var personalPlaceholder = ""
+    var preserveExistingNotes = true
 
-    // Sections de la description
-    var marker = "── Statistiques ──"
-    var taskInfoMarker = "── Informations de la tâche ──"
-    var personalMarker = "── Notes personnelles ──"
-    /// Reporte les propriétés du rappel (échéance, commentaires, priorité…).
-    var showTaskInfo = true
-    /// Section jamais réécrite, réservée à vos ajouts manuels.
-    var includePersonalSection = true
-    var personalPlaceholder = "(cette section n'est jamais réécrite)"
-
-    // Mise en forme du bloc de statistiques
+    // Contenu du bloc de statistiques
     var showSessionNumber = true
     var showCurrentDuration = true
     var showPreviousTotal = true
     var showLastSessionDate = true
     var showGrandTotal = true
 
-    /// Si faux, le bloc écrase entièrement la description existante.
-    var preserveExistingNotes = true
-
-    enum CodingKeys: String, CodingKey {
-        case enabled, calendarName, requireReminderMatch, reminderListName, looseTitleMatch
-        case cleanEventTitle
-        case taskInfoMarker, personalMarker, showTaskInfo, includePersonalSection, personalPlaceholder
-        case detectionDays, historyYears, marker
-        case showSessionNumber, showCurrentDuration, showPreviousTotal
-        case showLastSessionDate, showGrandTotal, preserveExistingNotes
+    var displayName: String {
+        let list = reminderListName.isEmpty ? "toutes les entrées" : reminderListName
+        let cal = calendarName.isEmpty ? "(aucun calendrier)" : calendarName
+        return "\(list)  →  \(cal)"
     }
 
-    /// Décodage tolérant : une clé absente (réglage ajouté dans une version
-    /// ultérieure) reprend sa valeur par défaut au lieu de faire échouer tout
-    /// le chargement.
+    func marker(for section: NoteSection) -> String {
+        sections.first { $0.section == section }?.marker ?? section.defaultMarker
+    }
+
+    func isEnabled(_ section: NoteSection) -> Bool {
+        sections.first { $0.section == section }?.enabled ?? false
+    }
+
+    /// Complète les sections manquantes (réglage écrit par une version
+    /// antérieure) sans perdre l'ordre déjà choisi.
+    mutating func normalizeSections() {
+        for section in NoteSection.allCases where !sections.contains(where: { $0.section == section }) {
+            sections.append(SectionSetting(section))
+        }
+        sections = sections.filter { NoteSection.allCases.contains($0.section) }
+    }
+}
+
+struct Config: Codable, Equatable, Sendable {
+    var enabled = true
+    var detectionDays = 60
+    var historyYears = 10
+    var pairings: [Pairing] = []
+
     init() {}
 
+    enum CodingKeys: String, CodingKey {
+        case enabled, detectionDays, historyYears, pairings
+        // Clés de l'ancien format, à couple unique.
+        case calendarName, reminderListName, requireReminderMatch, looseTitleMatch
+        case marker, taskInfoMarker, personalMarker
+        case showTaskInfo, includePersonalSection, personalPlaceholder, preserveExistingNotes
+        case showSessionNumber, showCurrentDuration, showPreviousTotal
+        case showLastSessionDate, showGrandTotal
+    }
+
+    /// Décodage tolérant : une clé absente reprend sa valeur par défaut, et un
+    /// réglage écrit par la version à couple unique est converti en une
+    /// association.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config()
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
-        calendarName = try c.decodeIfPresent(String.self, forKey: .calendarName) ?? d.calendarName
-        requireReminderMatch = try c.decodeIfPresent(Bool.self, forKey: .requireReminderMatch) ?? d.requireReminderMatch
-        reminderListName = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? d.reminderListName
-        looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? d.looseTitleMatch
-        cleanEventTitle = try c.decodeIfPresent(Bool.self, forKey: .cleanEventTitle) ?? d.cleanEventTitle
-        taskInfoMarker = try c.decodeIfPresent(String.self, forKey: .taskInfoMarker) ?? d.taskInfoMarker
-        personalMarker = try c.decodeIfPresent(String.self, forKey: .personalMarker) ?? d.personalMarker
-        showTaskInfo = try c.decodeIfPresent(Bool.self, forKey: .showTaskInfo) ?? d.showTaskInfo
-        includePersonalSection = try c.decodeIfPresent(Bool.self, forKey: .includePersonalSection) ?? d.includePersonalSection
-        personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? d.personalPlaceholder
         detectionDays = try c.decodeIfPresent(Int.self, forKey: .detectionDays) ?? d.detectionDays
         historyYears = try c.decodeIfPresent(Int.self, forKey: .historyYears) ?? d.historyYears
-        marker = try c.decodeIfPresent(String.self, forKey: .marker) ?? d.marker
-        showSessionNumber = try c.decodeIfPresent(Bool.self, forKey: .showSessionNumber) ?? d.showSessionNumber
-        showCurrentDuration = try c.decodeIfPresent(Bool.self, forKey: .showCurrentDuration) ?? d.showCurrentDuration
-        showPreviousTotal = try c.decodeIfPresent(Bool.self, forKey: .showPreviousTotal) ?? d.showPreviousTotal
-        showLastSessionDate = try c.decodeIfPresent(Bool.self, forKey: .showLastSessionDate) ?? d.showLastSessionDate
-        showGrandTotal = try c.decodeIfPresent(Bool.self, forKey: .showGrandTotal) ?? d.showGrandTotal
-        preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? d.preserveExistingNotes
+
+        if let decoded = try c.decodeIfPresent([Pairing].self, forKey: .pairings) {
+            pairings = decoded.map { var p = $0; p.normalizeSections(); return p }
+            return
+        }
+
+        // Migration depuis l'ancien format.
+        var p = Pairing()
+        p.calendarName = try c.decodeIfPresent(String.self, forKey: .calendarName) ?? ""
+        let requireMatch = try c.decodeIfPresent(Bool.self, forKey: .requireReminderMatch) ?? true
+        let list = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? ""
+        p.reminderListName = requireMatch ? list : ""
+        p.looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? p.looseTitleMatch
+        p.personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? ""
+        p.preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? true
+        p.showSessionNumber = try c.decodeIfPresent(Bool.self, forKey: .showSessionNumber) ?? true
+        p.showCurrentDuration = try c.decodeIfPresent(Bool.self, forKey: .showCurrentDuration) ?? true
+        p.showPreviousTotal = try c.decodeIfPresent(Bool.self, forKey: .showPreviousTotal) ?? true
+        p.showLastSessionDate = try c.decodeIfPresent(Bool.self, forKey: .showLastSessionDate) ?? true
+        p.showGrandTotal = try c.decodeIfPresent(Bool.self, forKey: .showGrandTotal) ?? true
+        p.sections = [
+            SectionSetting(.taskInfo,
+                           enabled: try c.decodeIfPresent(Bool.self, forKey: .showTaskInfo) ?? true,
+                           marker: try c.decodeIfPresent(String.self, forKey: .taskInfoMarker)),
+            SectionSetting(.personal,
+                           enabled: try c.decodeIfPresent(Bool.self, forKey: .includePersonalSection) ?? true,
+                           marker: try c.decodeIfPresent(String.self, forKey: .personalMarker)),
+            SectionSetting(.stats,
+                           marker: try c.decodeIfPresent(String.self, forKey: .marker)),
+        ]
+        pairings = [p]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encode(detectionDays, forKey: .detectionDays)
+        try c.encode(historyYears, forKey: .historyYears)
+        try c.encode(pairings, forKey: .pairings)
     }
 }
 

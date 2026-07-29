@@ -180,81 +180,96 @@ final class Engine {
         var result = ScanResult()
         store.refreshSourcesIfNecessary()
 
-        guard let calendar = store.calendars(for: .event).first(where: { $0.title == config.calendarName }) else {
-            result.messages.append("Calendrier « \(config.calendarName) » introuvable.")
-            result.summary = "Calendrier introuvable."
-            return result
-        }
-
         let now = Date()
         let window = Double(config.detectionDays) * 86_400
-        let events = store.events(matching: store.predicateForEvents(
-            withStart: now.addingTimeInterval(-window),
-            end: now.addingTimeInterval(window),
-            calendars: [calendar]))
+        let active = config.pairings.filter { $0.enabled && !$0.calendarName.isEmpty }
+        guard !active.isEmpty else {
+            result.messages.append("Aucune association active : rien à surveiller.")
+            result.summary = "Aucune association active."
+            return result
+        }
+        result.messages.append("Associations actives : \(active.map(\.displayName).joined(separator: " ; "))")
+
+        // Chaque association est traitée séparément : son calendrier, sa liste,
+        // sa mise en forme. Un même calendrier peut apparaître plusieurs fois.
+        var enriched = 0
+        var pending: [(pairing: Pairing, calendar: EKCalendar, events: [EKEvent])] = []
+        for pairing in active {
+            guard let calendar = store.calendars(for: .event)
+                .first(where: { $0.title == pairing.calendarName }) else {
+                result.messages.append("Calendrier « \(pairing.calendarName) » introuvable.")
+                continue
+            }
+            let events = store.events(matching: store.predicateForEvents(
+                withStart: now.addingTimeInterval(-window),
+                end: now.addingTimeInterval(window),
+                calendars: [calendar]))
+            pending.append((pairing, calendar, events))
+        }
 
         // Premier démarrage : on enregistre l'existant sans le modifier, pour ne
         // pas réécrire rétroactivement tout l'historique.
         guard bootstrapped else {
-            result.handled = events.compactMap(\.eventIdentifier)
+            result.handled = pending.flatMap { $0.events.compactMap(\.eventIdentifier) }
             result.messages.append("Initialisation : \(result.handled.count) événement(s) existant(s) marqués comme déjà vus.")
             result.summary = "Initialisé (\(result.handled.count) événements existants ignorés)."
             return result
         }
 
-        let fresh = events.filter { event in
-            guard let id = event.eventIdentifier else { return false }
-            return !known.contains(id)
-        }
-        guard !fresh.isEmpty else { return result }
+        for (pairing, calendar, events) in pending {
+            let fresh = events.filter { event in
+                guard let id = event.eventIdentifier else { return false }
+                return !known.contains(id)
+            }
+            guard !fresh.isEmpty else { continue }
 
-        // Triés du plus long au plus court : en correspondance souple, c'est le
-        // titre de tâche le plus spécifique qui doit l'emporter.
-        var taskTitles: [TaskTitle]?
-        if config.requireReminderMatch {
-            taskTitles = fetchTasks(listName: config.reminderListName, into: &result)
-                .sorted { $0.normalized.count > $1.normalized.count }
-        }
-
-        let historyStart = now.addingTimeInterval(-Double(config.historyYears) * 365 * 86_400)
-        let history = store.events(matching: store.predicateForEvents(
-            withStart: historyStart,
-            end: now.addingTimeInterval(window),
-            calendars: [calendar]))
-
-        var enriched = 0
-        for event in fresh {
-            guard let id = event.eventIdentifier else { continue }
-            result.handled.append(id)
-
-            let raw = Self.normalize(event.title)
-            guard !raw.isEmpty else { continue }
-
-            // Clé de regroupement : le titre de la tâche quand il y en a une,
-            // pour que « Tâche » et « Tâche\n14/09/2026 » comptent ensemble.
-            let key: String
-            let canonicalTitle: String?
-            let reminder: EKReminder?
-            if let taskTitles {
-                guard let matched = Self.matchTask(raw, among: taskTitles, loose: config.looseTitleMatch) else {
-                    result.messages.append("Ignoré : « \(Self.firstLine(event.title)) » n'est pas une tâche de \(config.reminderListName).")
-                    continue
-                }
-                key = matched.normalized
-                canonicalTitle = matched.original
-                reminder = matched.reminder
-            } else {
-                key = raw
-                canonicalTitle = nil
-                reminder = nil
+            // Triés du plus long au plus court : en correspondance souple, c'est
+            // le titre de tâche le plus spécifique qui doit l'emporter.
+            var taskTitles: [TaskTitle]?
+            if !pairing.reminderListName.isEmpty {
+                taskTitles = fetchTasks(listName: pairing.reminderListName, into: &result)
+                    .sorted { $0.normalized.count > $1.normalized.count }
             }
 
-            if let message = annotate(event, key: key, canonicalTitle: canonicalTitle,
-                                      reminder: reminder,
-                                      loose: config.looseTitleMatch && canonicalTitle != nil,
-                                      history: history, config: config) {
-                result.messages.append(message)
-                enriched += 1
+            let historyStart = now.addingTimeInterval(-Double(config.historyYears) * 365 * 86_400)
+            let history = store.events(matching: store.predicateForEvents(
+                withStart: historyStart,
+                end: now.addingTimeInterval(window),
+                calendars: [calendar]))
+
+            for event in fresh {
+                guard let id = event.eventIdentifier else { continue }
+                result.handled.append(id)
+
+                let raw = Self.normalize(event.title)
+                guard !raw.isEmpty else { continue }
+
+                // Clé de regroupement : le titre de la tâche quand il y en a une,
+                // pour que « Tâche » et « Tâche\n14/09/2026 » comptent ensemble.
+                let key: String
+                let canonicalTitle: String?
+                let reminder: EKReminder?
+                if let taskTitles {
+                    guard let matched = Self.matchTask(raw, among: taskTitles, loose: pairing.looseTitleMatch) else {
+                        result.messages.append("Ignoré : « \(Self.firstLine(event.title)) » n'est pas une tâche de \(pairing.reminderListName).")
+                        continue
+                    }
+                    key = matched.normalized
+                    canonicalTitle = matched.original
+                    reminder = matched.reminder
+                } else {
+                    key = raw
+                    canonicalTitle = nil
+                    reminder = nil
+                }
+
+                if let message = annotate(event, key: key, canonicalTitle: canonicalTitle,
+                                          reminder: reminder,
+                                          loose: pairing.looseTitleMatch && canonicalTitle != nil,
+                                          history: history, pairing: pairing) {
+                    result.messages.append(message)
+                    enriched += 1
+                }
             }
         }
 
@@ -300,7 +315,7 @@ final class Engine {
 
     private nonisolated func annotate(_ event: EKEvent, key: String, canonicalTitle: String?,
                                       reminder: EKReminder?, loose: Bool,
-                                      history: [EKEvent], config: Config) -> String? {
+                                      history: [EKEvent], pairing: Pairing) -> String? {
         guard let start = event.startDate else { return nil }
 
         // Occurrences antérieures : même tâche, terminées avant le début de la
@@ -321,49 +336,35 @@ final class Engine {
         // du rappel à la suite de son titre. Le titre est ramené à celui de la
         // tâche ; le contenu recopié n'est pas récupéré ici, il est reconstitué
         // proprement depuis les propriétés du rappel lui-même.
-        if config.cleanEventTitle, let canonicalTitle, !canonicalTitle.isEmpty,
-           (event.title ?? "") != canonicalTitle {
+        if let canonicalTitle, !canonicalTitle.isEmpty, (event.title ?? "") != canonicalTitle {
             event.title = canonicalTitle
         }
         let displayTitle = canonicalTitle ?? Self.firstLine(event.title)
 
-        var lines = [config.marker]
-        if config.showSessionNumber {
-            lines.append("Session n°\(previous.count + 1) — « \(displayTitle) »")
+        var stats: [String] = []
+        if pairing.showSessionNumber {
+            stats.append("Session n°\(previous.count + 1) — « \(displayTitle) »")
         }
-        if config.showCurrentDuration {
-            lines.append("Cette session : \(Self.formatDuration(currentDuration))")
+        if pairing.showCurrentDuration {
+            stats.append("Cette session : \(Self.formatDuration(currentDuration))")
         }
-        if config.showPreviousTotal {
-            lines.append(previous.isEmpty
+        if pairing.showPreviousTotal {
+            stats.append(previous.isEmpty
                 ? "Aucune session antérieure."
                 : "Sessions antérieures : \(previous.count) — \(Self.formatDuration(previousTotal))")
         }
-        if config.showLastSessionDate,
+        if pairing.showLastSessionDate,
            let last = previous.max(by: { ($0.endDate ?? .distantPast) < ($1.endDate ?? .distantPast) }),
            let lastEnd = last.endDate {
-            lines.append("Dernière séance : \(Self.dayFormatter.string(from: lastEnd))")
+            stats.append("Dernière séance : \(Self.dayFormatter.string(from: lastEnd))")
         }
-        if config.showGrandTotal {
-            lines.append("Cumul : \(Self.formatDuration(previousTotal + currentDuration))")
+        if pairing.showGrandTotal {
+            stats.append("Cumul : \(Self.formatDuration(previousTotal + currentDuration))")
         }
-        let block = lines.joined(separator: "\n")
 
-        // Le marqueur délimite notre bloc : on le remplace au lieu de l'empiler,
-        // et ce qui a été écrit à la main au-dessus est conservé.
-        let composer = NotesComposer(taskMarker: config.taskInfoMarker,
-                                     personalMarker: config.personalMarker,
-                                     statsMarker: config.marker)
-        var taskInfo: [String]? = nil
-        if config.showTaskInfo, let reminder {
-            taskInfo = ReminderDetails.lines(for: reminder)
-        }
-        event.notes = composer.compose(existing: event.notes ?? "",
-                                       taskInfo: taskInfo,
-                                       stats: block,
-                                       personalPlaceholder: config.personalPlaceholder,
-                                       includePersonal: config.includePersonalSection,
-                                       carryFreeText: config.preserveExistingNotes)
+        let taskInfo = reminder.map { ReminderDetails.lines(for: $0) } ?? []
+        event.notes = NotesComposer(pairing: pairing)
+            .compose(existing: event.notes ?? "", taskInfo: taskInfo, stats: stats)
 
         do {
             try store.save(event, span: .thisEvent, commit: true)

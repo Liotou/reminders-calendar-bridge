@@ -9,12 +9,12 @@ struct SettingsView: View {
         TabView {
             GeneralTab(store: store, engine: engine)
                 .tabItem { Label("Général", systemImage: "gearshape") }
-            FormatTab(store: store)
-                .tabItem { Label("Format", systemImage: "text.alignleft") }
+            PairingsTab(store: store, engine: engine)
+                .tabItem { Label("Associations", systemImage: "arrow.triangle.branch") }
             LogTab(engine: engine)
                 .tabItem { Label("Journal", systemImage: "list.bullet.rectangle") }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 700, height: 560)
         .onAppear { engine.refreshSources() }
     }
 }
@@ -35,42 +35,8 @@ private struct GeneralTab: View {
                 Toggle("Lancer au démarrage de la session", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, wanted in setLaunchAtLogin(wanted) }
                 if let loginError {
-                    Text(loginError).font(.caption).foregroundStyle(.red)
+                    Text(loginError).font(.caption).foregroundStyle(Color.red)
                 }
-            }
-
-            Section("Sources") {
-                Picker("Calendrier surveillé", selection: $store.config.calendarName) {
-                    ForEach(options(engine.availableCalendars, store.config.calendarName), id: \.self) {
-                        Text($0).tag($0)
-                    }
-                }
-                Toggle("N'enrichir que les titres présents dans une liste de rappels",
-                       isOn: $store.config.requireReminderMatch)
-                Picker("Liste de rappels", selection: $store.config.reminderListName) {
-                    ForEach(options(engine.availableReminderLists, store.config.reminderListName), id: \.self) {
-                        Text($0).tag($0)
-                    }
-                }
-                .disabled(!store.config.requireReminderMatch)
-
-                Toggle("Tolérer un suffixe après le titre de la tâche",
-                       isOn: $store.config.looseTitleMatch)
-                    .disabled(!store.config.requireReminderMatch)
-                Text("Un événement intitulé « T015 - Rédiger\\n14/09/2026 » est rattaché à la tâche « T015 - Rédiger », et compté avec elle.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Glisser-déposer depuis Rappels") {
-                Toggle("Nettoyer le titre de l'événement", isOn: $store.config.cleanEventTitle)
-                    .disabled(!store.config.requireReminderMatch)
-                Text("Déposer un rappel sur le calendrier recopie sa note à la suite du titre. Le titre est ramené à celui de la tâche.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Le contenu de la note n'est pas récupéré depuis le titre : il est reconstitué depuis les propriétés du rappel, dans la section « Informations de la tâche ».")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Fenêtres d'analyse") {
@@ -78,6 +44,9 @@ private struct GeneralTab: View {
                         value: $store.config.detectionDays, in: 1...365)
                 Stepper("Historique pris en compte : \(store.config.historyYears) ans",
                         value: $store.config.historyYears, in: 1...30)
+                Text("Communes à toutes les associations.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("État") {
@@ -97,14 +66,8 @@ private struct GeneralTab: View {
             Button("Retraiter", role: .destructive) { engine.reprocessAll() }
             Button("Annuler", role: .cancel) {}
         } message: {
-            Text("Le bloc de statistiques sera réécrit sur tous les événements du calendrier dans la fenêtre de détection, y compris ceux déjà traités.")
+            Text("Les sections « Informations de la tâche » et « Statistiques » seront réécrites sur tous les événements des calendriers associés, dans la fenêtre de détection. Les notes personnelles sont préservées.")
         }
-    }
-
-    /// Garantit que la valeur enregistrée reste sélectionnable même si le
-    /// calendrier ou la liste n'existe plus (ou pas encore chargé).
-    private func options(_ available: [String], _ current: String) -> [String] {
-        available.contains(current) ? available : ([current] + available)
     }
 
     private func accessLabel(_ state: AccessState) -> String {
@@ -130,49 +93,132 @@ private struct GeneralTab: View {
     }
 }
 
-// MARK: - Format
+// MARK: - Associations
 
-private struct FormatTab: View {
+private struct PairingsTab: View {
     @Bindable var store: ConfigStore
+    var engine: Engine
+    @State private var selection: Pairing.ID?
+
+    var body: some View {
+        HSplitView {
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    ForEach($store.config.pairings) { $pairing in
+                        HStack {
+                            Toggle("", isOn: $pairing.enabled)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(pairing.reminderListName.isEmpty
+                                     ? "Toutes les entrées" : pairing.reminderListName)
+                                    .lineLimit(1)
+                                Text(pairing.calendarName.isEmpty
+                                     ? "(aucun calendrier)" : pairing.calendarName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .tag(pairing.id)
+                    }
+                    .onMove { store.config.pairings.move(fromOffsets: $0, toOffset: $1) }
+                }
+
+                HStack(spacing: 4) {
+                    Button {
+                        var new = Pairing()
+                        new.calendarName = engine.availableCalendars.first ?? ""
+                        new.reminderListName = engine.availableReminderLists.first ?? ""
+                        store.config.pairings.append(new)
+                        selection = new.id
+                    } label: { Image(systemName: "plus") }
+
+                    Button {
+                        store.config.pairings.removeAll { $0.id == selection }
+                        selection = store.config.pairings.first?.id
+                    } label: { Image(systemName: "minus") }
+                        .disabled(selection == nil)
+                    Spacer()
+                }
+                .buttonStyle(.borderless)
+                .padding(6)
+            }
+            .frame(minWidth: 200, idealWidth: 230, maxWidth: 300)
+
+            Group {
+                if let index = store.config.pairings.firstIndex(where: { $0.id == selection }) {
+                    PairingDetail(pairing: $store.config.pairings[index], engine: engine)
+                } else {
+                    ContentUnavailableView("Aucune association sélectionnée",
+                                           systemImage: "arrow.triangle.branch",
+                                           description: Text("Chaque association relie une liste de rappels à un calendrier, avec sa propre mise en forme."))
+                }
+            }
+            .frame(minWidth: 380)
+        }
+        .onAppear { if selection == nil { selection = store.config.pairings.first?.id } }
+    }
+}
+
+private struct PairingDetail: View {
+    @Binding var pairing: Pairing
+    var engine: Engine
 
     var body: some View {
         Form {
+            Section("Sources") {
+                Picker("Liste de rappels", selection: $pairing.reminderListName) {
+                    Text("Aucune (tous les événements)").tag("")
+                    ForEach(options(engine.availableReminderLists, pairing.reminderListName), id: \.self) {
+                        Text($0).tag($0)
+                    }
+                }
+                Picker("Calendrier", selection: $pairing.calendarName) {
+                    ForEach(options(engine.availableCalendars, pairing.calendarName), id: \.self) {
+                        Text($0).tag($0)
+                    }
+                }
+                Toggle("Tolérer un suffixe après le titre de la tâche",
+                       isOn: $pairing.looseTitleMatch)
+                    .disabled(pairing.reminderListName.isEmpty)
+                Text("Le glisser-déposer d'un rappel ajoute sa note au titre. Le titre de l'événement est ensuite ramené à celui de la tâche.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Sections de la description") {
-                Toggle("Informations de la tâche", isOn: $store.config.showTaskInfo)
-                Text("Échéance, commentaires, priorité, liste, récurrence… relevés sur le rappel et régénérés à chaque passage.")
+                // L'ordre du tableau est l'ordre d'écriture : on le change par
+                // glissement.
+                List {
+                    ForEach($pairing.sections) { $setting in
+                        HStack(spacing: 8) {
+                            Image(systemName: "line.3.horizontal")
+                                .foregroundStyle(.tertiary)
+                            Toggle(setting.section.label, isOn: $setting.enabled)
+                            Spacer()
+                            TextField("", text: $setting.marker)
+                                .frame(width: 190)
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                    .onMove { pairing.sections.move(fromOffsets: $0, toOffset: $1) }
+                }
+                .frame(height: 96)
+                .listStyle(.plain)
+                Text("Glissez les lignes pour changer l'ordre. La section « Notes personnelles » n'est jamais réécrite.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Notes personnelles (jamais réécrites)", isOn: $store.config.includePersonalSection)
-                Text("Section protégée : ce que vous y écrivez survit à un retraitement complet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Texte initial de la section", text: $store.config.personalPlaceholder)
+                TextField("Texte initial des notes personnelles", text: $pairing.personalPlaceholder)
             }
 
-            Section("Contenu du bloc de statistiques") {
-                Toggle("Numéro de session", isOn: $store.config.showSessionNumber)
-                Toggle("Durée de la session courante", isOn: $store.config.showCurrentDuration)
-                Toggle("Nombre et durée des sessions antérieures", isOn: $store.config.showPreviousTotal)
-                Toggle("Date de la dernière séance", isOn: $store.config.showLastSessionDate)
-                Toggle("Cumul total", isOn: $store.config.showGrandTotal)
-            }
-
-            Section("Lignes de séparation") {
-                TextField("Informations de la tâche", text: $store.config.taskInfoMarker)
-                TextField("Notes personnelles", text: $store.config.personalMarker)
-                TextField("Statistiques", text: $store.config.marker)
-                Text("Ces lignes délimitent les sections. Les modifier après coup empêche de retrouver les sections déjà écrites.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Écriture") {
-                Toggle("Conserver les notes écrites à la main", isOn: $store.config.preserveExistingNotes)
-                Text(store.config.preserveExistingNotes
-                     ? "Le bloc est ajouté sous vos notes. S'il est déjà présent, il est remplacé plutôt qu'empilé."
-                     : "Attention : la description de l'événement sera entièrement remplacée.")
-                    .font(.caption)
-                    .foregroundStyle(store.config.preserveExistingNotes ? Color.secondary : Color.red)
+            Section("Statistiques") {
+                Toggle("Numéro de session", isOn: $pairing.showSessionNumber)
+                Toggle("Durée de la session courante", isOn: $pairing.showCurrentDuration)
+                Toggle("Nombre et durée des sessions antérieures", isOn: $pairing.showPreviousTotal)
+                Toggle("Date de la dernière séance", isOn: $pairing.showLastSessionDate)
+                Toggle("Cumul total", isOn: $pairing.showGrandTotal)
+                Toggle("Conserver le texte libre existant", isOn: $pairing.preserveExistingNotes)
             }
 
             Section("Aperçu") {
@@ -185,32 +231,29 @@ private struct FormatTab: View {
         .formStyle(.grouped)
     }
 
+    /// Garantit que la valeur enregistrée reste sélectionnable même si le
+    /// calendrier ou la liste n'existe plus.
+    private func options(_ available: [String], _ current: String) -> [String] {
+        available.contains(current) || current.isEmpty ? available : ([current] + available)
+    }
+
     private var preview: String {
-        let c = store.config
-        var blocks: [String] = []
-
-        if c.showTaskInfo {
-            blocks.append([c.taskInfoMarker,
-                           "Liste : Doctorat - Tâches",
-                           "Échéance : 14 septembre 2026",
-                           "Priorité : haute",
-                           "Commentaires : voir le compte rendu du 3 juillet"].joined(separator: "\n"))
+        var taskInfo: [String] = []
+        if !pairing.reminderListName.isEmpty {
+            taskInfo = ["Liste : \(pairing.reminderListName)",
+                        "Échéance : 14 septembre 2026",
+                        "Priorité : haute",
+                        "Commentaires : voir le compte rendu du 3 juillet"]
         }
-        if c.includePersonalSection {
-            blocks.append(c.personalPlaceholder.isEmpty
-                          ? c.personalMarker
-                          : c.personalMarker + "\n" + c.personalPlaceholder)
-        }
+        var stats: [String] = []
+        if pairing.showSessionNumber { stats.append("Session n°8 — « Rédaction chapitre 2 »") }
+        if pairing.showCurrentDuration { stats.append("Cette session : 2 h 30") }
+        if pairing.showPreviousTotal { stats.append("Sessions antérieures : 7 — 14 h 15") }
+        if pairing.showLastSessionDate { stats.append("Dernière séance : 22 juillet 2026") }
+        if pairing.showGrandTotal { stats.append("Cumul : 16 h 45") }
 
-        var lines = [c.marker]
-        if c.showSessionNumber { lines.append("Session n°8 — « Rédaction chapitre 2 »") }
-        if c.showCurrentDuration { lines.append("Cette session : 2 h 30") }
-        if c.showPreviousTotal { lines.append("Sessions antérieures : 7 — 14 h 15") }
-        if c.showLastSessionDate { lines.append("Dernière séance : 22 juillet 2026") }
-        if c.showGrandTotal { lines.append("Cumul : 16 h 45") }
-        blocks.append(lines.joined(separator: "\n"))
-
-        return blocks.joined(separator: "\n\n")
+        return NotesComposer(pairing: pairing)
+            .compose(existing: "", taskInfo: taskInfo, stats: stats)
     }
 }
 
