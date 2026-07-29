@@ -203,6 +203,12 @@ the reminder through EventKit, then rewrites the events that depend on it — th
 completion marker and the links themselves flip accordingly. Nothing leaves the
 machine, and no server is involved.
 
+Changing a formatting setting — or installing a version that writes differently
+— is enough to have the events rewritten on the next pass: the formatting
+settings and the app version are part of each event's fingerprint. Without that,
+the settings preview and the calendar would disagree until the task itself
+happened to change.
+
 Only the relevant action is offered: "Mark as completed" on an open task,
 "Reopen the task" on a completed one.
 

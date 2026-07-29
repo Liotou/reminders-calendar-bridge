@@ -359,7 +359,10 @@ final class Engine {
         }
 
         var written = 0
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+
         for (pairing, calendar, events) in pending {
+            let formatStamp = pairing.formatFingerprint + "\u{3}" + appVersion
             var tasks: [TaskTitle] = []
             var tasksById: [String: TaskTitle] = [:]
             if !pairing.reminderListName.isEmpty {
@@ -407,7 +410,9 @@ final class Engine {
                     }
                 }
 
-                let fingerprint = task.map { ReminderDetails.fingerprint(for: $0.reminder) } ?? ""
+                let fingerprint = task.map {
+                    ReminderDetails.fingerprint(for: $0.reminder) + "\u{3}" + formatStamp
+                } ?? ""
                 let record = state.records[id]
                 // Un événement est réécrit s'il est nouveau, ou si le rappel a
                 // changé depuis la dernière fois — titre, contenu, achèvement.

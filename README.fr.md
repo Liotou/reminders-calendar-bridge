@@ -203,6 +203,12 @@ sur le rappel via EventKit, puis réécrit les événements qui en dépendent �
 marqueur d'achèvement et les liens eux-mêmes basculent en conséquence. Rien ne
 sort de la machine, aucun serveur n'intervient.
 
+Modifier un réglage de mise en forme — ou installer une version qui écrit
+différemment — suffit à faire réécrire les événements au passage suivant : les
+réglages de mise en forme et la version de l'application entrent dans
+l'empreinte de chaque événement. Sans cela, l'aperçu des réglages et le
+calendrier divergeraient jusqu'à ce que la tâche elle-même change.
+
 Seule l'action pertinente est proposée : « Marquer terminée » sur une tâche
 ouverte, « Rouvrir la tâche » sur une tâche cochée.
 

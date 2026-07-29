@@ -125,6 +125,27 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
         case showPreviousTotal, showLastSessionDate, showGrandTotal
     }
 
+    /// Empreinte des réglages qui déterminent le texte écrit. Elle entre dans
+    /// l'empreinte des événements : changer une mise en forme, ou installer une
+    /// version qui écrit différemment, suffit alors à les faire réécrire — sans
+    /// quoi l'aperçu des réglages et le calendrier divergeraient jusqu'à la
+    /// prochaine modification de la tâche.
+    var formatFingerprint: String {
+        var parts: [String] = [completedPrefix,
+                               personalPlaceholder,
+                               String(linkReminderInLocation),
+                               String(embedTaskIdentifier),
+                               String(looseTitleMatch),
+                               String(preserveExistingNotes),
+                               String(showSessionNumber),
+                               String(showCurrentDuration),
+                               String(showPreviousTotal),
+                               String(showLastSessionDate),
+                               String(showGrandTotal)]
+        parts += sections.map { "\($0.section.rawValue):\($0.enabled):\($0.marker)" }
+        return parts.joined(separator: "\u{2}")
+    }
+
     func marker(for section: NoteSection) -> String {
         sections.first { $0.section == section }?.marker ?? section.defaultMarker
     }
