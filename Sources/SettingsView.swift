@@ -190,6 +190,9 @@ private struct PairingDetail: View {
             Section("Sections de la description") {
                 // L'ordre du tableau est l'ordre d'écriture : on le change par
                 // glissement.
+                // Ces lignes sont déplaçables : sur macOS, toute la ligne est la
+                // poignée de glissement. On n'y met donc aucun champ de saisie,
+                // que le geste de glissement rendrait inutilisable.
                 List {
                     ForEach($pairing.sections) { $setting in
                         HStack(spacing: 8) {
@@ -197,9 +200,6 @@ private struct PairingDetail: View {
                                 .foregroundStyle(.tertiary)
                             Toggle(setting.section.label, isOn: $setting.enabled)
                             Spacer()
-                            TextField("", text: $setting.marker)
-                                .frame(width: 190)
-                                .font(.system(.caption, design: .monospaced))
                         }
                     }
                     .onMove { pairing.sections.move(fromOffsets: $0, toOffset: $1) }
@@ -207,6 +207,15 @@ private struct PairingDetail: View {
                 .frame(height: 96)
                 .listStyle(.plain)
                 Text("Glissez les lignes pour changer l'ordre. La section « Notes personnelles » n'est jamais réécrite.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Lignes de séparation") {
+                ForEach($pairing.sections) { $setting in
+                    TextField(setting.section.label, text: $setting.marker)
+                }
+                Text("Elles délimitent les sections dans la description. Les modifier après coup empêche de retrouver celles déjà écrites dans les événements existants.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField("Texte initial des notes personnelles", text: $pairing.personalPlaceholder)
