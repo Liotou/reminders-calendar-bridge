@@ -287,7 +287,7 @@ private struct LogTab: View {
             .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
 
             HStack {
-                Text("Journal complet : ~/Library/Application Support/SessionsStats/")
+                Text("Journal complet : ~/Library/Application Support/RemindersCalendarBridge/")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()

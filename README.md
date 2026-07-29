@@ -1,8 +1,14 @@
-# Sessions Stats
+# Reminders → Calendar Bridge
 
-Application macOS de barre de menus qui surveille en temps réel un calendrier et
-inscrit, dans la description de chaque nouvelle session, le nombre d'occurrences
-passées du même intitulé et leur durée cumulée.
+Application macOS de barre de menus qui relie Apple Rappels et Apple Calendrier :
+elle surveille en temps réel les calendriers de votre choix et inscrit, dans la
+description de chaque nouvelle session, les propriétés de la tâche
+correspondante et le cumul des séances déjà consacrées au même travail.
+
+L'identifiant de bundle reste `fr.equiriconi.SessionsStats`, nom que portait
+l'application à ses débuts : il est ce à quoi macOS rattache les autorisations
+Calendrier et Rappels, les réglages et l'état des événements déjà traités. Le
+changer les remettrait tous à zéro.
 
 Pas de scrutation périodique : l'application reste éveillée et s'abonne à la
 notification système `EKEventStoreChanged`, émise à chaque modification de la
@@ -15,7 +21,7 @@ achève de se synchroniser sur le Mac.
 ./build.sh
 ```
 
-Puis déplacez `SessionsStats.app` dans `/Applications` et **lancez-la depuis le
+Puis déplacez `RemindersCalendarBridge.app` dans `/Applications` et **lancez-la depuis le
 Finder** (double-clic). Une fois cette première installation faite, `build.sh`
 reporte automatiquement les versions suivantes dans `/Applications`. Ce point n'est pas cosmétique : lancée par un autre
 programme, l'application hérite des autorisations de celui-ci au lieu de
@@ -70,7 +76,7 @@ avec un aperçu en direct du résultat.
 
 1. À chaque notification (regroupée sur 2 s pour absorber les rafales iCloud),
    les événements de chaque association sont listés sur la fenêtre de détection.
-2. Ils sont comparés à `~/Library/Application Support/SessionsStats/state.json`,
+2. Ils sont comparés à `~/Library/Application Support/RemindersCalendarBridge/state.json`,
    qui retient les identifiants déjà traités. La détection ne repose donc pas
    sur la date de création : un événement est « nouveau » au moment où il
    apparaît sur le Mac, quel qu'ait été le délai de synchronisation.
@@ -148,7 +154,7 @@ alors redemander les autorisations.
 
 **Point critique** : la signature active le *hardened runtime*, et dans ce mode
 macOS exige des droits explicites pour accéder au Calendrier et aux Rappels.
-Ils sont déclarés dans `SessionsStats.entitlements` :
+Ils sont déclarés dans `RemindersCalendarBridge.entitlements` :
 
 - `com.apple.security.personal-information.calendars`
 - `com.apple.security.personal-information.reminders`

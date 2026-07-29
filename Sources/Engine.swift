@@ -33,21 +33,38 @@ final class Engine {
     // Délibérément partagé entre le thread principal et la file d'analyse :
     // EKEventStore supporte cet usage, et l'analyse ne doit pas bloquer l'UI.
     nonisolated(unsafe) private let store = EKEventStore()
-    private let scanQueue = DispatchQueue(label: "fr.equiriconi.sessions-stats.scan")
+    private let scanQueue = DispatchQueue(label: "fr.equiriconi.bridge.scan")
     private var config = ConfigStore.shared.config
     private var state = PersistedState()
     private var observer: NSObjectProtocol?
     private var debounce: DispatchWorkItem?
 
-    private static let supportDir = FileManager.default
+    private static let appSupport = FileManager.default
         .homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/SessionsStats", isDirectory: true)
+        .appendingPathComponent("Library/Application Support", isDirectory: true)
+    static let supportDir = appSupport
+        .appendingPathComponent("RemindersCalendarBridge", isDirectory: true)
     private static let stateURL = supportDir.appendingPathComponent("state.json")
-    static let logURL = supportDir.appendingPathComponent("sessions-stats.log")
+    static let logURL = supportDir.appendingPathComponent("bridge.log")
 
     private init() {
+        Self.migrateSupportDirectory()
         try? FileManager.default.createDirectory(at: Self.supportDir, withIntermediateDirectories: true)
         loadState()
+    }
+
+    /// L'application s'est appelée SessionsStats : on reprend son dossier plutôt
+    /// que de repartir d'un état vide, ce qui ferait passer tous les événements
+    /// existants pour de nouveaux.
+    private static func migrateSupportDirectory() {
+        let fm = FileManager.default
+        let old = appSupport.appendingPathComponent("SessionsStats", isDirectory: true)
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: supportDir.path) else { return }
+        try? fm.moveItem(at: old, to: supportDir)
+        let oldLog = supportDir.appendingPathComponent("sessions-stats.log")
+        if fm.fileExists(atPath: oldLog.path), !fm.fileExists(atPath: logURL.path) {
+            try? fm.moveItem(at: oldLog, to: logURL)
+        }
     }
 
     // MARK: - Cycle de vie

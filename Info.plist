@@ -3,13 +3,16 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>SessionsStats</string>
+	<string>Reminders Calendar Bridge</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sessions Stats</string>
+	<string>Reminders → Calendar Bridge</string>
+	<!-- Volontairement inchangé : l'identifiant de bundle porte les
+	     autorisations TCC, les réglages et l'état des événements traités.
+	     Le modifier les remettrait tous à zéro. -->
 	<key>CFBundleIdentifier</key>
 	<string>fr.equiriconi.SessionsStats</string>
 	<key>CFBundleExecutable</key>
-	<string>SessionsStats</string>
+	<string>RemindersCalendarBridge</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

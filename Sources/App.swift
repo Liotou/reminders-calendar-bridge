@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct SessionsStatsApp: App {
+struct RemindersCalendarBridgeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var engine = Engine.shared
     @State private var store = ConfigStore.shared
