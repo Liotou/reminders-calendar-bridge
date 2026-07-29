@@ -229,6 +229,27 @@ final class Engine {
         var summary: String?
     }
 
+    /// `predicateForEvents` ne couvre qu'environ quatre ans : au-delà, il ne
+    /// renvoie rien du tout, silencieusement. On interroge donc par tranches,
+    /// puis on dédoublonne les événements qui chevauchent une frontière.
+    private nonisolated func events(in calendar: EKCalendar, from: Date, to: Date) -> [EKEvent] {
+        let slice: TimeInterval = 3 * 365 * 86_400
+        var collected: [EKEvent] = []
+        var seen = Set<String>()
+        var cursor = from
+        while cursor < to {
+            let end = min(cursor.addingTimeInterval(slice), to)
+            let batch = store.events(matching: store.predicateForEvents(
+                withStart: cursor, end: end, calendars: [calendar]))
+            for event in batch {
+                guard let id = event.eventIdentifier else { continue }
+                if seen.insert(id).inserted { collected.append(event) }
+            }
+            cursor = end
+        }
+        return collected
+    }
+
     private nonisolated func performScan(config: Config, state: PersistedState) -> ScanResult {
         var result = ScanResult()
         store.refreshSourcesIfNecessary()
@@ -253,10 +274,9 @@ final class Engine {
                                            "Calendar “\(pairing.calendarName)” not found."))
                 continue
             }
-            let events = store.events(matching: store.predicateForEvents(
-                withStart: now.addingTimeInterval(-window),
-                end: now.addingTimeInterval(window),
-                calendars: [calendar]))
+            let events = self.events(in: calendar,
+                                     from: now.addingTimeInterval(-window),
+                                     to: now.addingTimeInterval(window))
             pending.append((pairing, calendar, events))
         }
 
@@ -284,10 +304,9 @@ final class Engine {
             }
 
             let historyStart = now.addingTimeInterval(-Double(config.historyYears) * 365 * 86_400)
-            let history = store.events(matching: store.predicateForEvents(
-                withStart: historyStart,
-                end: now.addingTimeInterval(window),
-                calendars: [calendar]))
+            let history = self.events(in: calendar,
+                                      from: historyStart,
+                                      to: now.addingTimeInterval(window))
 
             for event in events {
                 guard let id = event.eventIdentifier else { continue }
@@ -535,8 +554,8 @@ final class Engine {
 
         do {
             try store.save(event, span: .thisEvent, commit: true)
-            return L.t("Écrit : « \(displayTitle) » (session n°\(previous.count + 1))",
-                       "Written: “\(displayTitle)” (session #\(previous.count + 1))")
+            return L.t("Écrit : « \(displayTitle) » — session n°\(previous.count + 1) sur \(history.count) événement(s) examiné(s)",
+                       "Written: “\(displayTitle)” — session #\(previous.count + 1) across \(history.count) event(s) examined")
         } catch {
             return L.t("Échec sur « \(displayTitle) » : \(error.localizedDescription)",
                        "Failed on “\(displayTitle)”: \(error.localizedDescription)")
