@@ -16,9 +16,21 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.3</string>
+	<string>1.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>6</string>
+	<string>7</string>
+	<!-- Schéma des liens d'action inscrits dans les descriptions d'événements. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>fr.equiriconi.SessionsStats.actions</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>rcb</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<!-- Agent : pas d'icône dans le Dock, uniquement la barre de menus. -->

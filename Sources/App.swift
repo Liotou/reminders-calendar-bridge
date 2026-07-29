@@ -10,6 +10,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Updater.shared.checkIfDue()
         }
     }
+
+    /// Liens d'action cliqués depuis la description d'un événement.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let (action, taskID) = TaskAction.parse(url) else { continue }
+            // Laisse le temps aux autorisations d'aboutir si l'application vient
+            // d'être réveillée par le clic.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                Engine.shared.perform(action, on: taskID)
+            }
+        }
+    }
 }
 
 @main

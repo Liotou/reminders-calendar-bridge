@@ -10,7 +10,7 @@ struct NotesComposer {
         pairing.sections.map(\.marker).filter { !$0.isEmpty }
     }
 
-    func compose(existing: String, taskInfo: [String], stats: [String]) -> String {
+    func compose(existing: String, taskInfo: [String], stats: [String], actions: [String] = []) -> String {
         var personal = extract(section: .personal, from: existing)
 
         // Texte libre écrit avant toute section : on le récupère dans la section
@@ -28,6 +28,7 @@ struct NotesComposer {
             let body: [String] = switch setting.section {
             case .taskInfo: taskInfo
             case .stats: stats
+            case .actions: actions
             case .personal: personal.isEmpty ? [] : [personal]
             }
             // Une section vide n'est écrite que si elle est personnelle : son

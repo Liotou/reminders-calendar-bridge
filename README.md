@@ -181,6 +181,26 @@ location field for an actual place), local state file, then title comparison.
 prefixed with a marker (`✅` by default, customisable or removable per pairing).
 Unticking the task removes it.
 
+## Action links
+
+The last section of the description offers links that act on the task:
+
+```
+── Actions ──
+Mark as completed: rcb://complete/5C1F…A93
+Open in Reminders: x-apple-reminderkit://REMCDReminder/5C1F…A93
+```
+
+`rcb://` is a scheme declared by this app. Clicking a link wakes it, it acts on
+the reminder through EventKit, then rewrites the events that depend on it — the
+completion marker and the links themselves flip accordingly. Nothing leaves the
+machine, and no server is involved.
+
+Only the relevant action is offered: "Mark as completed" on an open task,
+"Reopen the task" on a completed one.
+
+Like the other sections, Actions can be reordered or disabled per pairing.
+
 ## Language
 
 French and English, chosen in the General tab, or following the system language.

@@ -180,6 +180,28 @@ de note (facultatif, désactivé par défaut, utile si vous réservez le champ
 précédé d'un marqueur (`✅` par défaut, modifiable ou supprimable par
 association). Décocher la tâche le retire.
 
+## Liens d'action
+
+La dernière section de la description propose des liens qui agissent sur la
+tâche :
+
+```
+── Actions ──
+Marquer terminée : rcb://complete/5C1F…A93
+Ouvrir dans Rappels : x-apple-reminderkit://REMCDReminder/5C1F…A93
+```
+
+`rcb://` est un schéma déclaré par l'application. Le clic la réveille, elle agit
+sur le rappel via EventKit, puis réécrit les événements qui en dépendent — le
+marqueur d'achèvement et les liens eux-mêmes basculent en conséquence. Rien ne
+sort de la machine, aucun serveur n'intervient.
+
+Seule l'action pertinente est proposée : « Marquer terminée » sur une tâche
+ouverte, « Rouvrir la tâche » sur une tâche cochée.
+
+Comme les autres, la section Actions se réordonne ou se désactive par
+association.
+
 ## Langue
 
 Français et anglais, au choix dans l'onglet Général, ou selon la langue du

@@ -3,23 +3,25 @@ import Observation
 
 /// Les trois sections que peut porter la description d'un événement.
 enum NoteSection: String, Codable, CaseIterable, Identifiable, Sendable {
-    case taskInfo, personal, stats
+    case taskInfo, personal, stats, actions
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .taskInfo: "Informations de la tâche"
-        case .personal: "Notes personnelles"
-        case .stats: "Statistiques"
+        case .taskInfo: L.t("Informations de la tâche", "Task information")
+        case .personal: L.t("Notes personnelles", "Personal notes")
+        case .stats: L.t("Statistiques", "Statistics")
+        case .actions: L.t("Actions", "Actions")
         }
     }
 
     var defaultMarker: String {
         switch self {
-        case .taskInfo: "── Informations de la tâche ──"
-        case .personal: "── Notes personnelles ──"
-        case .stats: "── Statistiques ──"
+        case .taskInfo: L.t("── Informations de la tâche ──", "── Task information ──")
+        case .personal: L.t("── Notes personnelles ──", "── Personal notes ──")
+        case .stats: L.t("── Statistiques ──", "── Statistics ──")
+        case .actions: L.t("── Actions ──", "── Actions ──")
         }
     }
 }

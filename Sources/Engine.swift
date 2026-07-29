@@ -1,5 +1,6 @@
 import Foundation
 import EventKit
+import AppKit
 import Observation
 
 enum AccessState: Equatable {
@@ -182,6 +183,43 @@ final class Engine {
 
     func scanNow() {
         scheduleScan(delay: 0)
+    }
+
+    /// Exécute un lien d'action cliqué depuis la description d'un événement.
+    func perform(_ action: TaskAction, on taskID: String) {
+        guard case .granted = reminderAccess else {
+            log(L.t("Action ignorée : accès aux Rappels non accordé.",
+                    "Action ignored: Reminders access not granted."))
+            return
+        }
+        guard let reminder = store.calendarItem(withIdentifier: taskID) as? EKReminder else {
+            log(L.t("Action impossible : tâche introuvable (\(taskID)).",
+                    "Action failed: task not found (\(taskID))."))
+            return
+        }
+
+        switch action {
+        case .open:
+            if let url = URL(string: Self.reminderURL(taskID)) { NSWorkspace.shared.open(url) }
+            return
+        case .complete, .reopen:
+            reminder.isCompleted = (action == .complete)
+        }
+
+        do {
+            try store.save(reminder, commit: true)
+            log(action == .complete
+                ? L.t("Tâche marquée terminée : « \(reminder.title ?? "") »",
+                      "Task marked completed: “\(reminder.title ?? "")”")
+                : L.t("Tâche rouverte : « \(reminder.title ?? "") »",
+                      "Task reopened: “\(reminder.title ?? "")”"))
+            // Les événements liés portent le marqueur d'achèvement et la section
+            // d'actions : ils doivent être réécrits.
+            scheduleScan(delay: 0.3)
+        } catch {
+            log(L.t("Échec de l'action : \(error.localizedDescription)",
+                    "Action failed: \(error.localizedDescription)"))
+        }
     }
 
     // MARK: - Planification
@@ -530,9 +568,10 @@ final class Engine {
         }
 
         let taskInfo = task.map { ReminderDetails.lines(for: $0.reminder) } ?? []
+        let actions = task.map { TaskAction.lines(for: $0.reminder) } ?? []
         var notes = NotesComposer(pairing: pairing)
             .compose(existing: Self.stripEmbeddedTaskID(event.notes ?? ""),
-                     taskInfo: taskInfo, stats: stats)
+                     taskInfo: taskInfo, stats: stats, actions: actions)
 
         // L'identifiant fermant la note relie durablement l'événement à sa
         // tâche, même si le titre de celle-ci change ensuite.

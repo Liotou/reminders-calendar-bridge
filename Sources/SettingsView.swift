@@ -297,7 +297,7 @@ private struct PairingDetail: View {
                     }
                     .onMove { pairing.sections.move(fromOffsets: $0, toOffset: $1) }
                 }
-                .frame(height: 96)
+                .frame(height: 124)
                 .listStyle(.plain)
                 Text(L.t("Glissez les lignes pour changer l'ordre. La section « Notes personnelles » n'est jamais réécrite.",
                          "Drag rows to reorder. The “Personal notes” section is never rewritten."))
@@ -350,6 +350,13 @@ private struct PairingDetail: View {
                         "\(L.t("Priorité", "Priority")) : \(L.t("haute", "high"))",
                         "\(L.t("Commentaires", "Notes")) : \(L.t("voir le compte rendu du 3 juillet", "see the July 3 minutes"))"]
         }
+        var actions: [String] = []
+        if !pairing.reminderListName.isEmpty {
+            actions = [L.t("Marquer terminée : rcb://complete/5C1F…A93",
+                           "Mark as completed: rcb://complete/5C1F…A93"),
+                       L.t("Ouvrir dans Rappels : x-apple-reminderkit://REMCDReminder/5C1F…A93",
+                           "Open in Reminders: x-apple-reminderkit://REMCDReminder/5C1F…A93")]
+        }
         var stats: [String] = []
         let title = L.t("Rédaction chapitre 2", "Writing chapter 2")
         if pairing.showSessionNumber { stats.append(L.t("Session n°8 — « \(title) »", "Session #8 — “\(title)”")) }
@@ -364,7 +371,7 @@ private struct PairingDetail: View {
                         "Location: x-apple-reminderkit://REMCDReminder/5C1F…A93\n\n")
         }
         text += NotesComposer(pairing: pairing)
-            .compose(existing: "", taskInfo: taskInfo, stats: stats)
+            .compose(existing: "", taskInfo: taskInfo, stats: stats, actions: actions)
         if pairing.embedTaskIdentifier && !pairing.reminderListName.isEmpty {
             text += "\n\n⟦rcb:5C1F…A93⟧"
         }
