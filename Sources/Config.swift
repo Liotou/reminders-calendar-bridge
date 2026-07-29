@@ -64,9 +64,12 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
     var looseTitleMatch = true
     /// Préfixe apposé au titre de l'événement quand la tâche est terminée.
     var completedPrefix = "✅"
-    /// Inscrit l'identifiant de la tâche en fin de note : c'est ce qui permet de
-    /// suivre un rappel dont le titre change.
-    var embedTaskIdentifier = true
+    /// Inscrit le lien du rappel dans le champ « Lieu ou appel vidéo » de
+    /// l'événement : cliquable pour ouvrir la tâche, et identifiant durable.
+    var linkReminderInLocation = true
+    /// Même rôle, mais en fin de note. Redondant avec le lien dans le lieu ;
+    /// utile si vous réservez ce champ à un vrai lieu.
+    var embedTaskIdentifier = false
 
     var sections: [SectionSetting] = NoteSection.allCases.map { SectionSetting($0) }
     var personalPlaceholder = ""
@@ -100,6 +103,7 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
         looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? d.looseTitleMatch
         completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? d.completedPrefix
         embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? d.embedTaskIdentifier
+        linkReminderInLocation = try c.decodeIfPresent(Bool.self, forKey: .linkReminderInLocation) ?? d.linkReminderInLocation
         sections = try c.decodeIfPresent([SectionSetting].self, forKey: .sections) ?? d.sections
         personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? d.personalPlaceholder
         preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? d.preserveExistingNotes
@@ -113,7 +117,8 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, enabled, calendarName, reminderListName, looseTitleMatch
-        case completedPrefix, embedTaskIdentifier, sections, personalPlaceholder
+        case completedPrefix, embedTaskIdentifier, linkReminderInLocation
+        case sections, personalPlaceholder
         case preserveExistingNotes, showSessionNumber, showCurrentDuration
         case showPreviousTotal, showLastSessionDate, showGrandTotal
     }
@@ -150,7 +155,7 @@ struct Config: Codable, Equatable, Sendable {
         case enabled, detectionDays, historyYears, pairings, language, checkForUpdates
         // Clés de l'ancien format, à couple unique.
         case calendarName, reminderListName, requireReminderMatch, looseTitleMatch
-        case completedPrefix, embedTaskIdentifier
+        case completedPrefix, embedTaskIdentifier, linkReminderInLocation
         case marker, taskInfoMarker, personalMarker
         case showTaskInfo, includePersonalSection, personalPlaceholder, preserveExistingNotes
         case showSessionNumber, showCurrentDuration, showPreviousTotal
@@ -183,6 +188,7 @@ struct Config: Codable, Equatable, Sendable {
         p.looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? p.looseTitleMatch
         p.completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? p.completedPrefix
         p.embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? p.embedTaskIdentifier
+        p.linkReminderInLocation = try c.decodeIfPresent(Bool.self, forKey: .linkReminderInLocation) ?? p.linkReminderInLocation
         p.personalPlaceholder = try c.decodeIfPresent(String.self, forKey: .personalPlaceholder) ?? ""
         p.preserveExistingNotes = try c.decodeIfPresent(Bool.self, forKey: .preserveExistingNotes) ?? true
         p.showSessionNumber = try c.decodeIfPresent(Bool.self, forKey: .showSessionNumber) ?? true

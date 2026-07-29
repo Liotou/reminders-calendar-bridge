@@ -298,7 +298,10 @@ final class Engine {
                 // titre du rappel, ce que la comparaison de titres ne fait pas.
                 var task: TaskTitle?
                 if !tasksById.isEmpty {
-                    if let embedded = Self.embeddedTaskID(in: event.notes) {
+                    if let linked = Self.taskID(inLocation: event.location) {
+                        task = tasksById[linked]
+                    }
+                    if task == nil, let embedded = Self.embeddedTaskID(in: event.notes) {
                         task = tasksById[embedded]
                     }
                     if task == nil, let cached = state.records[id]?.reminderId {
@@ -398,6 +401,20 @@ final class Engine {
     nonisolated private static let idPrefix = "⟦rcb:"
     nonisolated private static let idSuffix = "⟧"
 
+    /// Schéma d'URL de Rappels. Le lien ouvre la tâche, et son identifiant est
+    /// celui qu'EventKit expose sous `calendarItemIdentifier`.
+    nonisolated static let reminderScheme = "x-apple-reminder://"
+
+    nonisolated static func reminderURL(_ id: String) -> String { reminderScheme + id }
+
+    nonisolated static func taskID(inLocation location: String?) -> String? {
+        guard let location else { return nil }
+        let trimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix(reminderScheme) else { return nil }
+        let id = String(trimmed.dropFirst(reminderScheme.count))
+        return id.isEmpty ? nil : id
+    }
+
     nonisolated static func embeddedTaskID(in notes: String?) -> String? {
         guard let notes,
               let start = notes.range(of: idPrefix, options: .backwards),
@@ -431,7 +448,8 @@ final class Engine {
             guard other.eventIdentifier != event.eventIdentifier,
                   (other.endDate ?? .distantPast) <= start else { return false }
             if let task {
-                let otherID = Self.embeddedTaskID(in: other.notes)
+                let otherID = Self.taskID(inLocation: other.location)
+                    ?? Self.embeddedTaskID(in: other.notes)
                     ?? other.eventIdentifier.flatMap { records[$0]?.reminderId }
                 if let otherID { return otherID == task.id }
             }
@@ -492,6 +510,17 @@ final class Engine {
             notes += "\n\n\(Self.idPrefix)\(task.id)\(Self.idSuffix)"
         }
         event.notes = notes
+
+        // Le lien dans « Lieu ou appel vidéo » ouvre la tâche d'un clic et fait
+        // office d'identifiant. On n'écrase jamais un lieu saisi à la main : ce
+        // champ appartient d'abord à l'utilisateur.
+        if let task, pairing.linkReminderInLocation {
+            let existing = event.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if existing.isEmpty || Self.taskID(inLocation: existing) != nil {
+                let link = Self.reminderURL(task.id)
+                if existing != link { event.location = link }
+            }
+        }
 
         do {
             try store.save(event, span: .thisEvent, commit: true)

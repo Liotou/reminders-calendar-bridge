@@ -151,11 +151,15 @@ events.
 
 ## Following modified tasks
 
-Every written event ends with its task identifier:
+Every written event carries a link to its reminder in the **Location or Video
+Call** field:
 
 ```
-⟦rcb:5C1F…A93⟧
+x-apple-reminder://5C1F…A93
 ```
+
+Calendar renders it as a clickable link, so the task opens in Reminders in one
+click — and the same field doubles as a durable identifier.
 
 That link is what makes tracking possible. Rename a reminder, or change its due
 date, priority or notes, and every event that depends on it is updated on the
@@ -166,9 +170,12 @@ Statistics are never lost in the process: they are not stored, they are
 recomputed from the calendar on every write. Personal notes are carried over
 verbatim.
 
-Attachment is resolved in this order: identifier written in the notes, then the
-local state file, then title comparison. The identifier can be disabled per
-pairing, at the cost of rename tracking.
+A location you typed yourself is never overwritten: the field is written only
+when it is empty or already holds a reminder link.
+
+Attachment is resolved in this order: link in the location, identifier written
+at the end of the notes (optional, off by default, useful if you keep the
+location field for an actual place), local state file, then title comparison.
 
 **Completed task** — as soon as a reminder is ticked, the title of its events is
 prefixed with a marker (`✅` by default, customisable or removable per pairing).

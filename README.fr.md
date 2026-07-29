@@ -150,11 +150,15 @@ déjà écrites dans les événements existants.
 
 ## Suivi des tâches modifiées
 
-Chaque événement écrit se termine par l'identifiant de sa tâche :
+Chaque événement écrit porte un lien vers son rappel dans le champ **Lieu ou
+appel vidéo** :
 
 ```
-⟦rcb:5C1F…A93⟧
+x-apple-reminder://5C1F…A93
 ```
+
+Calendrier l'affiche comme un lien cliquable : la tâche s'ouvre dans Rappels
+d'un clic, et le même champ fait office d'identifiant durable.
 
 C'est ce lien qui rend le suivi possible. Si vous renommez un rappel, ou en
 changez l'échéance, la priorité ou les commentaires, tous les événements qui en
@@ -165,9 +169,12 @@ Les statistiques ne sont jamais perdues dans l'opération : elles ne sont pas
 stockées, elles sont recalculées depuis le calendrier à chaque écriture. Les
 notes personnelles, elles, sont reprises mot pour mot.
 
-Le rattachement se fait dans cet ordre : identifiant inscrit dans la note, puis
-fichier d'état local, puis comparaison de titres. L'identifiant peut être
-désactivé par association, au prix du suivi des renommages.
+Un lieu saisi à la main n'est jamais écrasé : le champ n'est rempli que s'il est
+vide ou s'il contient déjà un lien de rappel.
+
+Le rattachement se fait dans cet ordre : lien dans le lieu, identifiant en fin
+de note (facultatif, désactivé par défaut, utile si vous réservez le champ
+« Lieu » à un véritable lieu), fichier d'état local, puis comparaison de titres.
 
 **Tâche terminée** — dès qu'un rappel est coché, le titre de ses événements est
 précédé d'un marqueur (`✅` par défaut, modifiable ou supprimable par

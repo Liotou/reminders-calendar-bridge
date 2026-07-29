@@ -242,12 +242,20 @@ private struct PairingDetail: View {
             }
 
             Section(L.t("Suivi de la tâche", "Task tracking")) {
-                Toggle(L.t("Inscrire l'identifiant de la tâche en fin de note",
-                           "Write the task identifier at the end of the notes"),
+                Toggle(L.t("Lien vers le rappel dans « Lieu ou appel vidéo »",
+                           "Link to the reminder in “Location or Video Call”"),
+                       isOn: $pairing.linkReminderInLocation)
+                    .disabled(pairing.reminderListName.isEmpty)
+                Text(L.t("Cliquable pour ouvrir la tâche dans Rappels, et fait office d'identifiant durable. Un lieu saisi à la main n'est jamais écrasé.",
+                         "Clickable to open the task in Reminders, and doubles as a durable identifier. A location you typed yourself is never overwritten."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle(L.t("Inscrire aussi l'identifiant en fin de note",
+                           "Also write the identifier at the end of the notes"),
                        isOn: $pairing.embedTaskIdentifier)
                     .disabled(pairing.reminderListName.isEmpty)
-                Text(L.t("C'est ce lien qui permet de suivre une tâche dont le titre change ensuite, et de répercuter la modification sur toutes ses séances.",
-                         "This link is what lets a task be followed after its title changes, and the change propagated to every one of its sessions."))
+                Text(L.t("Redondant avec le lien ci-dessus. Utile si vous réservez le champ « Lieu » à un véritable lieu.",
+                         "Redundant with the link above. Useful if you keep the location field for an actual place."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField(L.t("Marqueur de tâche terminée", "Completed task marker"),
@@ -334,7 +342,12 @@ private struct PairingDetail: View {
         if pairing.showLastSessionDate { stats.append(L.t("Dernière séance : 22 juillet 2026", "Last session: July 22, 2026")) }
         if pairing.showGrandTotal { stats.append(L.t("Cumul : 16 h 45", "Total: 16 h 45")) }
 
-        var text = NotesComposer(pairing: pairing)
+        var text = ""
+        if pairing.linkReminderInLocation && !pairing.reminderListName.isEmpty {
+            text += L.t("Lieu : x-apple-reminder://5C1F…A93\n\n",
+                        "Location: x-apple-reminder://5C1F…A93\n\n")
+        }
+        text += NotesComposer(pairing: pairing)
             .compose(existing: "", taskInfo: taskInfo, stats: stats)
         if pairing.embedTaskIdentifier && !pairing.reminderListName.isEmpty {
             text += "\n\n⟦rcb:5C1F…A93⟧"
