@@ -1,19 +1,21 @@
 # Reminders → Calendar Bridge
 
-Application macOS de barre de menus qui relie Apple Rappels et Apple Calendrier :
-elle surveille en temps réel les calendriers de votre choix et inscrit, dans la
-description de chaque nouvelle session, les propriétés de la tâche
-correspondante et le cumul des séances déjà consacrées au même travail.
+A macOS menu-bar app that bridges Apple Reminders and Apple Calendar: it watches
+the calendars of your choice in real time and writes, into the description of
+each new session, the properties of the matching task and the cumulative time
+already spent on the same work.
 
-L'identifiant de bundle reste `fr.equiriconi.SessionsStats`, nom que portait
-l'application à ses débuts : il est ce à quoi macOS rattache les autorisations
-Calendrier et Rappels, les réglages et l'état des événements déjà traités. Le
-changer les remettrait tous à zéro.
+No polling: the app stays awake and subscribes to the system's
+`EKEventStoreChanged` notification, emitted whenever the Calendar or Reminders
+database changes — including when an event created on an iPhone finishes syncing
+to the Mac.
 
-Pas de scrutation périodique : l'application reste éveillée et s'abonne à la
-notification système `EKEventStoreChanged`, émise à chaque modification de la
-base Calendrier ou Rappels — y compris quand un événement créé sur iPhone
-achève de se synchroniser sur le Mac.
+The bundle identifier remains `fr.equiriconi.SessionsStats`, the name the app
+carried at first. That identifier is what macOS ties the Calendar and Reminders
+permissions to, along with the settings and the record of already processed
+events. Changing it would reset all of them.
+
+*Le README est également disponible en français : [README.fr.md](README.fr.md).*
 
 ## Installation
 
@@ -21,207 +23,206 @@ achève de se synchroniser sur le Mac.
 ./build.sh
 ```
 
-Puis déplacez `RemindersCalendarBridge.app` dans `/Applications` et **lancez-la depuis le
-Finder** (double-clic). Une fois cette première installation faite, `build.sh`
-reporte automatiquement les versions suivantes dans `/Applications`. Ce point n'est pas cosmétique : lancée par un autre
-programme, l'application hérite des autorisations de celui-ci au lieu de
-demander les siennes, et macOS refuse l'accès au Calendrier sans afficher de
-dialogue.
+Then move `RemindersCalendarBridge.app` to `/Applications` and **launch it from
+the Finder** (double-click). Once installed there, `build.sh` deploys later
+builds to `/Applications` automatically.
 
-Deux demandes d'autorisation apparaissent au premier lancement (Calendrier,
-puis Rappels). Acceptez-les.
+Launching from the Finder is not cosmetic: started by another program, the app
+inherits that program's permissions instead of requesting its own, and macOS
+denies Calendar access without showing any dialog.
 
-Aucune icône dans le Dock : l'application vit dans la barre de menus.
+Two permission prompts appear on first launch (Calendar, then Reminders). Accept
+both.
 
-## Réglages
+No Dock icon: the app lives in the menu bar.
 
-Menu de la barre de menus → **Réglages…**
+## Settings
 
-**Général**
-- Surveillance active / lancement à l'ouverture de session
-- Fenêtre de détection (±N jours) et profondeur d'historique (N années),
-  communes à toutes les associations
-- État des autorisations, nombre d'événements suivis, dernière activité
-- **Analyser maintenant**, **Oublier l'état**, **Retraiter tout l'historique**
+Menu bar → **Settings…**
 
-**Associations** — voir ci-dessous.
+**General**
+- Watching enabled / launch at login
+- Language (French, English, or follow the system)
+- Detection window (±N days) and history depth (N years), shared by every pairing
+- Permission status, tracked event count, last activity
+- **Scan now**, **Forget state**, **Reprocess everything**
+- Update checking
 
-**Journal** — les 200 dernières lignes, et accès au fichier complet.
+**Pairings** — see below.
 
-## Associations
+**Log** — the last 200 lines, plus access to the full file.
 
-Une association relie **une liste de rappels à un calendrier**. Il peut y en
-avoir autant que voulu, et chacune a sa propre mise en forme :
+## Pairings
 
-```
-Doctorat - Tâches           →  Sessions de travail
-Doctorat - Tâches de lecture →  Sessions de lecture
-```
-
-Un même calendrier peut apparaître dans plusieurs associations. Une liste vide
-(« Aucune ») traite tous les événements du calendrier et les regroupe sur leur
-propre titre, sans passer par Rappels.
-
-Chaque association définit :
-
-- la tolérance à un suffixe après le titre de la tâche ;
-- **les sections de la description, leur ordre et leurs libellés** — l'ordre se
-  change en glissant les lignes ;
-- le texte initial de la section personnelle ;
-- le contenu du bloc de statistiques, ligne par ligne ;
-
-avec un aperçu en direct du résultat.
-
-## Fonctionnement
-
-1. À chaque notification (regroupée sur 2 s pour absorber les rafales iCloud),
-   les événements de chaque association sont listés sur la fenêtre de détection.
-2. Ils sont comparés à `~/Library/Application Support/RemindersCalendarBridge/state.json`,
-   qui retient les identifiants déjà traités. La détection ne repose donc pas
-   sur la date de création : un événement est « nouveau » au moment où il
-   apparaît sur le Mac, quel qu'ait été le délai de synchronisation.
-3. Pour chaque nouvel événement de titre X, un rappel de titre X doit exister
-   dans la liste associée (terminé ou non) ; sinon l'événement est ignoré.
-4. Les événements de même titre qui se terminent avant le début de la session
-   courante sont comptés, leurs durées sommées, et les sections sont écrites.
-
-Le rapprochement des titres est insensible à la casse, aux accents et aux
-espaces superflus.
-
-## Glisser-déposer depuis Rappels
-
-Déposer un rappel sur le calendrier crée un événement dont le titre reprend
-celui de la tâche **suivi du contenu de sa note**. L'application gère ce cas :
-
-- la correspondance se fait par préfixe, donc l'événement est bien rattaché à sa
-  tâche malgré le suffixe (« Tolérer un suffixe après le titre de la tâche ») ;
-- le regroupement se fait sur le titre de la **tâche**, sans quoi une même
-  activité serait comptée séparément selon que le suffixe est présent ou non ;
-- le titre de l'événement est ramené à celui de la tâche, tel qu'il figure dans
-  Rappels ;
-- le contenu de la note n'est pas récupéré depuis le titre : il est reconstitué
-  proprement depuis les propriétés du rappel, dans la section « Informations de
-  la tâche » décrite ci-dessous.
-
-**Premier lancement** : les événements déjà présents sont enregistrés comme vus
-sans être modifiés — l'historique n'est pas réécrit rétroactivement. Le bouton
-« Retraiter tout l'historique » permet de forcer l'inverse.
-
-## Description de l'événement
-
-Elle est composée de trois sections balisées :
+A pairing links **one reminder list to one calendar**. There can be as many as
+you like, each with its own formatting:
 
 ```
-── Informations de la tâche ──
-Liste : Doctorat - Tâches
-Échéance : 14 septembre 2026
-Priorité : haute
-Commentaires : voir le compte rendu du 3 juillet
-
-── Notes personnelles ──
-Relu les entretiens 4 à 7, plan de la section 2 arrêté.
-
-── Statistiques ──
-Session n°8 — « Rédaction chapitre 2 »
-Cette session : 2 h 30
-Sessions antérieures : 7 — 14 h 15
-Dernière séance : 22 juillet 2026
-Cumul : 16 h 45
+Doctorate - Tasks          →  Work sessions
+Doctorate - Reading tasks  →  Reading sessions
 ```
 
-**Informations de la tâche** — relevées sur le rappel lui-même : liste,
-échéance, date de début, priorité, lieu, lien, récurrence, alertes, date
-d'achèvement, commentaires. Seules les propriétés renseignées apparaissent.
-Régénérée à chaque passage.
+The same calendar may appear in several pairings. An empty list ("None")
+processes every event of the calendar and groups them on their own title,
+without going through Reminders.
 
-**Notes personnelles** — section protégée. Son contenu est repris mot pour mot,
-y compris lors d'un retraitement complet : c'est là qu'écrire ce que vous avez
-accompli. Le texte libre trouvé dans une description antérieure à toute section
-y est versé au premier passage, plutôt que d'être écrasé.
+Each pairing defines:
 
-**Statistiques** — régénérée à chaque passage.
+- tolerance for a suffix after the task title;
+- whether the task identifier is written into the notes, and the marker used for
+  completed tasks;
+- **the description sections, their order and their headers** — the order is
+  changed by dragging rows;
+- the initial text of the personal section;
+- the contents of the statistics block, line by line;
 
-L'ordre des trois sections se règle par glissement, association par association,
-et chaque section peut être désactivée. Les lignes de séparation sont
-personnalisables : les modifier après coup empêche de retrouver les sections
-déjà écrites dans les événements existants.
+with a live preview of the result.
 
-## Suivi des tâches modifiées
+## How it works
 
-Chaque événement écrit se termine par l'identifiant de sa tâche :
+1. On each notification (coalesced over 2 s to absorb iCloud bursts), the events
+   of every pairing are listed over the detection window.
+2. They are compared against
+   `~/Library/Application Support/RemindersCalendarBridge/state.json`, which
+   holds what is known about each event. Detection therefore does not rely on
+   creation dates: an event is "new" the moment it appears on the Mac, whatever
+   the sync delay was.
+3. Each event is attached to its task, then written if it is new or if the task
+   has changed since the last pass.
+4. Events belonging to the same task that end before the current session starts
+   are counted, their durations summed, and the sections are written.
+
+Title matching ignores case, accents and redundant whitespace.
+
+## Dragging from Reminders
+
+Dropping a reminder onto the calendar creates an event whose title is the task
+title **followed by the contents of its notes**. The app handles this:
+
+- matching is done by prefix, so the event is still attached to its task despite
+  the suffix ("Allow a suffix after the task title");
+- grouping is done on the **task** title, otherwise the same activity would be
+  counted separately depending on whether the suffix is present;
+- the event title is reduced to the task title as it appears in Reminders;
+- the notes content is not salvaged from the title: it is rebuilt cleanly from
+  the reminder's own properties, in the "Task information" section below.
+
+**First run**: existing events are recorded as seen without being modified — the
+history is not rewritten retroactively. The "Reprocess everything" button forces
+the opposite.
+
+## Event description
+
+It is made of three marked sections:
+
+```
+── Task information ──
+List: Doctorate - Tasks
+Due: September 14, 2026
+Priority: high
+Notes: see the July 3 minutes
+
+── Personal notes ──
+Reread interviews 4 to 7, outline of section 2 settled.
+
+── Statistics ──
+Session #8 — “Writing chapter 2”
+This session: 2 h 30
+Earlier sessions: 7 — 14 h 15
+Last session: July 22, 2026
+Total: 16 h 45
+```
+
+**Task information** — read from the reminder itself: list, due date, start
+date, priority, location, link, recurrence, alerts, completion date, notes. Only
+the properties that are set appear. Regenerated on every pass.
+
+**Personal notes** — a protected section. Its contents are carried over
+verbatim, including through a full reprocess: this is where to write what you
+accomplished. Free text found in a description that predates any section is
+moved here on the first pass rather than being overwritten.
+
+**Statistics** — regenerated on every pass.
+
+The order of the three sections is set by dragging, pairing by pairing, and each
+section can be disabled. The section headers are customisable: changing them
+afterwards prevents already written sections from being found in existing
+events.
+
+## Following modified tasks
+
+Every written event ends with its task identifier:
 
 ```
 ⟦rcb:5C1F…A93⟧
 ```
 
-C'est ce lien qui rend le suivi possible. Si vous renommez un rappel, ou en
-changez l'échéance, la priorité ou les commentaires, tous les événements qui en
-dépendent sont mis à jour au prochain passage — titre compris. Une comparaison
-de titres ne le permettrait pas : après renommage, plus rien ne correspondrait.
+That link is what makes tracking possible. Rename a reminder, or change its due
+date, priority or notes, and every event that depends on it is updated on the
+next pass — title included. Title comparison alone could not do this: after a
+rename, nothing would match any more.
 
-Les statistiques ne sont jamais perdues dans l'opération : elles ne sont pas
-stockées, elles sont recalculées depuis le calendrier à chaque écriture. Les
-notes personnelles, elles, sont reprises mot pour mot.
+Statistics are never lost in the process: they are not stored, they are
+recomputed from the calendar on every write. Personal notes are carried over
+verbatim.
 
-Le rattachement se fait dans cet ordre : identifiant inscrit dans la note, puis
-fichier d'état local, puis comparaison de titres. L'identifiant peut être
-désactivé par association, au prix du suivi des renommages.
+Attachment is resolved in this order: identifier written in the notes, then the
+local state file, then title comparison. The identifier can be disabled per
+pairing, at the cost of rename tracking.
 
-**Tâche terminée** — dès qu'un rappel est coché, le titre de ses événements est
-précédé d'un marqueur (`✅` par défaut, modifiable ou supprimable par
-association). Décocher la tâche le retire.
+**Completed task** — as soon as a reminder is ticked, the title of its events is
+prefixed with a marker (`✅` by default, customisable or removable per pairing).
+Unticking the task removes it.
 
-## Langue
+## Language
 
-Français et anglais, au choix dans l'onglet Général, ou selon la langue du
-système. Le réglage porte aussi bien sur l'interface que sur le texte écrit dans
-les descriptions d'événements.
+French and English, chosen in the General tab, or following the system language.
+The setting applies to the interface as well as to the text written into event
+descriptions.
 
-## Mises à jour
+## Updates
 
-L'application interroge les publications GitHub de ce dépôt, au plus une fois
-par jour, et signale l'existence d'une version plus récente. Rien n'est installé
-sans votre accord.
+The app queries this repository's GitHub releases, at most once a day, and
+reports when a newer version exists. Nothing is installed without your consent.
 
-L'application étant signée en ad-hoc, il n'y a pas de certificat de développeur
-à vérifier. Le lien de confiance repose donc sur trois points : le dépôt est
-figé dans le code, l'échange se fait en HTTPS, et l'archive téléchargée doit
-présenter une signature intacte et le même identifiant de bundle que
-l'application en place. L'ancienne version est conservée le temps du
-remplacement et remise en place en cas d'échec.
+Because the app is ad-hoc signed, there is no developer certificate to verify.
+The trust model therefore rests on three points: the repository is pinned in the
+code, the exchange happens over HTTPS, and the downloaded archive must carry an
+intact signature and the same bundle identifier as the installed app. The
+previous version is kept during the swap and restored if anything fails.
 
-Pour publier une version : porter le nouveau numéro dans `CFBundleShortVersionString`
-(Info.plist), construire, puis
+To publish a version: set the new number in `CFBundleShortVersionString`
+(Info.plist), build, then
 
 ```
 ditto -c -k --sequesterRsrc --keepParent /Applications/RemindersCalendarBridge.app RemindersCalendarBridge.zip
 gh release create vX.Y.Z RemindersCalendarBridge.zip --title vX.Y.Z --notes "…"
 ```
 
-## Signature et autorisations
+## Signing and permissions
 
-`build.sh` signe l'application en ad-hoc, ce qui suffit à TCC et à l'ouverture
-au démarrage. Chaque recompilation change l'empreinte du binaire : macOS peut
-alors redemander les autorisations.
+`build.sh` signs the app ad-hoc, which is enough for TCC and for launch at
+login. Every rebuild changes the binary's hash, so macOS may ask for permissions
+again.
 
-**Point critique** : la signature active le *hardened runtime*, et dans ce mode
-macOS exige des droits explicites pour accéder au Calendrier et aux Rappels.
-Ils sont déclarés dans `RemindersCalendarBridge.entitlements` :
+**Critical point**: signing enables the hardened runtime, and in that mode macOS
+requires explicit entitlements to reach Calendar and Reminders. They are
+declared in `RemindersCalendarBridge.entitlements`:
 
 - `com.apple.security.personal-information.calendars`
 - `com.apple.security.personal-information.reminders`
 
-Sans eux, l'accès est refusé **immédiatement et silencieusement** : aucun
-dialogue d'autorisation ne s'affiche, l'application n'apparaît nulle part dans
-Réglages Système → Confidentialité, et rien dans son propre journal n'en donne
-la raison. Le diagnostic se lit uniquement dans les traces de `tccd` :
+Without them, access is denied **immediately and silently**: no permission
+dialog appears, the app shows up nowhere in System Settings → Privacy, and
+nothing in its own log explains why. The diagnosis is only readable in `tccd`'s
+traces:
 
 ```
 /usr/bin/log stream --predicate 'process == "tccd"' --info --debug
 ```
 
-Ne retirez pas l'option `--entitlements` de `build.sh`.
+Do not remove the `--entitlements` option from `build.sh`.
 
 ## Licence
 
-MIT — voir [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
