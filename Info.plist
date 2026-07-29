@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>SessionsStats</string>
+	<key>CFBundleDisplayName</key>
+	<string>Sessions Stats</string>
+	<key>CFBundleIdentifier</key>
+	<string>fr.equiriconi.SessionsStats</string>
+	<key>CFBundleExecutable</key>
+	<string>SessionsStats</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<!-- Agent : pas d'icône dans le Dock, uniquement la barre de menus. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Pour lire les sessions de travail et y inscrire les statistiques cumulées.</string>
+	<!-- Clé héritée : certaines versions de macOS la réclament encore pour
+	     afficher le dialogue d'autorisation Calendrier. -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>Pour lire les sessions de travail et y inscrire les statistiques cumulées.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Pour inscrire les statistiques cumulées dans les sessions de travail.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Pour vérifier que le titre d'une session correspond à une tâche de la liste choisie.</string>
+</dict>
+</plist>
