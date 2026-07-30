@@ -367,7 +367,10 @@ final class Engine {
         var calendarsByTitle: [String: EKCalendar] = [:]
         for calendar in store.calendars(for: .event) { calendarsByTitle[calendar.title] = calendar }
 
-        var pending: [(pairing: Pairing, events: [EKEvent])] = []
+        // `stray` : calendrier non associé, balayé seulement pour y récupérer
+        // les événements égarés. On n'y reconnaît une tâche que sur un indice
+        // certain — jamais sur une ressemblance de titre.
+        var pending: [(pairing: Pairing, events: [EKEvent], stray: Bool)] = []
         for pairing in active {
             guard let calendar = calendarsByTitle[pairing.calendarName] else {
                 result.messages.append(L.t("Calendrier « \(pairing.calendarName) » introuvable.",
@@ -376,7 +379,22 @@ final class Engine {
             }
             pending.append((pairing, events(in: calendar,
                                             from: now.addingTimeInterval(-window),
-                                            to: now.addingTimeInterval(window))))
+                                            to: now.addingTimeInterval(window)), false))
+        }
+
+        // Calendrier retient le dernier calendrier utilisé : le dépôt peut donc
+        // atterrir dans un calendrier qui n'est associé à rien. Sans ce balayage,
+        // l'événement resterait invisible et ne serait jamais rangé.
+        if config.fileEventsByList, !tasksById.isEmpty {
+            let watched = Set(active.map(\.calendarName))
+            for calendar in store.calendars(for: .event)
+            where !watched.contains(calendar.title) && calendar.allowsContentModifications {
+                var neutral = Pairing()
+                neutral.calendarName = calendar.title
+                pending.append((neutral, events(in: calendar,
+                                                from: now.addingTimeInterval(-window),
+                                                to: now.addingTimeInterval(window)), true))
+            }
         }
 
         // Premier démarrage : on enregistre l'existant sans le modifier, pour ne
@@ -403,7 +421,7 @@ final class Engine {
 
         var written = 0
         var moved = 0
-        for (pairing, calendarEvents) in pending {
+        for (pairing, calendarEvents, stray) in pending {
             let ownTasks = allTasks.filter {
                 pairing.reminderListNames.contains($0.reminder.calendar?.title ?? "")
             }
@@ -426,7 +444,7 @@ final class Engine {
                     if task == nil, let cached = state.records[id]?.reminderId {
                         task = tasksById[cached]
                     }
-                    if task == nil {
+                    if task == nil, !stray {
                         let raw = Self.matchable(event.title, pairing: pairing)
                         if !raw.isEmpty {
                             // Les tâches de l'association d'abord : un titre
@@ -439,7 +457,7 @@ final class Engine {
                 }
 
                 guard let task else {
-                    if !pairing.reminderListNames.isEmpty,
+                    if !stray, !pairing.reminderListNames.isEmpty,
                        state.records[id] == nil, !state.seen.contains(id) {
                         result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est une tâche d'aucune des listes : \(pairing.listsSummary).",
                                                    "Skipped: “\(Self.firstLine(event.title))” is not a task in any of: \(pairing.listsSummary)."))
@@ -453,7 +471,7 @@ final class Engine {
                 var effective = pairing
                 let listName = task.reminder.calendar?.title ?? ""
                 if config.fileEventsByList,
-                   !pairing.reminderListNames.isEmpty,
+                   stray || !pairing.reminderListNames.isEmpty,
                    !ambiguous.contains(listName),
                    let target = owner[listName],
                    target.calendarName != pairing.calendarName,
@@ -474,6 +492,8 @@ final class Engine {
                                                    "Could not file into “\(target.calendarName)”: \(error.localizedDescription)"))
                     }
                 }
+
+                guard !stray || effective.calendarName != pairing.calendarName else { continue }
 
                 let taskSessions = sessions(of: task, title: event.title,
                                             history: history(of: effective.calendarName),
