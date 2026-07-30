@@ -444,14 +444,28 @@ final class Engine {
                     if task == nil, let cached = state.records[id]?.reminderId {
                         task = tasksById[cached]
                     }
-                    if task == nil, !stray {
+                    if task == nil {
                         let raw = Self.matchable(event.title, pairing: pairing)
-                        if !raw.isEmpty {
+                        if !raw.isEmpty, !stray {
                             // Les tâches de l'association d'abord : un titre
                             // identique dans deux listes ne doit pas faire
                             // basculer un événement déjà bien rangé.
                             task = Self.matchTask(raw, among: ownTasks, loose: pairing.looseTitleMatch)
                                 ?? Self.matchTask(raw, among: allTasks, loose: pairing.looseTitleMatch)
+                        } else if !raw.isEmpty {
+                            // Calendrier n'inscrit aucun lien quand le dépôt
+                            // atterrit dans un calendrier non associé : le titre
+                            // est alors le seul indice disponible. On l'accepte,
+                            // mais uniquement s'il désigne une tâche et une seule.
+                            switch Self.uniqueTask(raw, among: allTasks) {
+                            case .one(let matched):
+                                task = matched
+                            case .several(let count):
+                                result.messages.append(L.t("Non rangé : « \(Self.firstLine(event.title)) » correspond à \(count) tâches.",
+                                                           "Not filed: “\(Self.firstLine(event.title))” matches \(count) tasks."))
+                            case .none:
+                                break
+                            }
                         }
                     }
                 }
@@ -572,6 +586,32 @@ final class Engine {
         let reminder: EKReminder
 
         var id: String { reminder.calendarItemIdentifier }
+    }
+
+    enum TaskMatch {
+        case none
+        case one(TaskTitle)
+        case several(Int)
+    }
+
+    /// Rapprochement par titre sur un calendrier non associé, où aucun lien
+    /// n'existe. Plus exigeant qu'ailleurs : le titre de la tâche doit être
+    /// assez long pour être significatif, et ne désigner qu'une seule tâche —
+    /// sans quoi un rendez-vous personnel pourrait quitter son calendrier.
+    nonisolated static func uniqueTask(_ title: String, among tasks: [TaskTitle]) -> TaskMatch {
+        let minimum = 6
+        let candidates = tasks.filter {
+            $0.normalized.count >= minimum
+                && (title == $0.normalized || title.hasPrefix($0.normalized))
+        }
+        guard let best = candidates.max(by: { $0.normalized.count < $1.normalized.count }) else {
+            return .none
+        }
+        // Deux tâches de même titre ne se départagent pas : on s'abstient.
+        let ties = candidates.filter {
+            $0.normalized.count == best.normalized.count && $0.id != best.id
+        }
+        return ties.isEmpty ? .one(best) : .several(ties.count + 1)
     }
 
     /// Toutes les séances d'une même tâche dans un calendrier. Le rattachement

@@ -88,10 +88,12 @@ travers — dès qu'un événement est rattaché à sa tâche, il est déplacé 
 calendrier associé à la liste dont vient cette tâche.
 
 Les calendriers associés à rien sont balayés eux aussi — le dernier calendrier
-utilisé peut très bien en être un. Une tâche n'y est reconnue que sur un indice
-certain : le lien du rappel dans le lieu, l'identifiant en note, ou le fichier
-d'état local. Jamais sur une ressemblance de titres, pour qu'un rendez-vous
-personnel nommé comme une tâche ne quitte jamais votre calendrier privé.
+utilisé peut très bien en être un. Déposé là, un rappel ne laisse **aucun lien
+vers sa tâche** : Calendrier n'en inscrit un que dans les calendriers qu'il
+connaît. Le titre est donc le seul indice disponible, et il est accepté sous
+deux conditions strictes : le titre de la tâche doit compter au moins six
+caractères, et ne désigner qu'une seule tâche. Deux tâches homonymes ne se
+départagent pas — rien n'est déplacé, et le journal le dit.
 
 Trois garde-fous :
 
