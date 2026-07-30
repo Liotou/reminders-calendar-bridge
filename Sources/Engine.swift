@@ -331,20 +331,52 @@ final class Engine {
             return result
         }
 
-        // Chaque association est traitée séparément : son calendrier, sa liste,
-        // sa mise en forme. Un même calendrier peut apparaître plusieurs fois.
-        var pending: [(pairing: Pairing, calendar: EKCalendar, events: [EKEvent])] = []
+        // Toutes les tâches de toutes les listes surveillées, en une requête.
+        // Cet index global est ce qui permet de reconnaître une tâche déposée
+        // dans le mauvais calendrier, donc de la router vers le bon.
+        let allListNames = Array(Set(active.flatMap(\.reminderListNames)))
+        var allTasks: [TaskTitle] = []
+        var tasksById: [String: TaskTitle] = [:]
+        if !allListNames.isEmpty {
+            // Triées du titre le plus long au plus court : en correspondance
+            // souple, la tâche la plus spécifique doit l'emporter.
+            allTasks = fetchTasks(listNames: allListNames, into: &result)
+                .sorted { $0.normalized.count > $1.normalized.count }
+            for task in allTasks { tasksById[task.id] = task }
+        }
+
+        // Quelle association possède quelle liste. Une liste rattachée à deux
+        // calendriers différents n'a pas de destination évidente : on ne
+        // déplacera rien dans ce cas plutôt que de trancher au hasard.
+        var owner: [String: Pairing] = [:]
+        var ambiguous: Set<String> = []
         for pairing in active {
-            guard let calendar = store.calendars(for: .event)
-                .first(where: { $0.title == pairing.calendarName }) else {
+            for name in pairing.reminderListNames {
+                if let already = owner[name], already.calendarName != pairing.calendarName {
+                    ambiguous.insert(name)
+                } else {
+                    owner[name] = pairing
+                }
+            }
+        }
+        for name in ambiguous.sorted() {
+            result.messages.append(L.t("Liste « \(name) » rattachée à plusieurs calendriers : aucun rangement automatique.",
+                                       "List “\(name)” is attached to several calendars: no automatic filing."))
+        }
+
+        var calendarsByTitle: [String: EKCalendar] = [:]
+        for calendar in store.calendars(for: .event) { calendarsByTitle[calendar.title] = calendar }
+
+        var pending: [(pairing: Pairing, events: [EKEvent])] = []
+        for pairing in active {
+            guard let calendar = calendarsByTitle[pairing.calendarName] else {
                 result.messages.append(L.t("Calendrier « \(pairing.calendarName) » introuvable.",
                                            "Calendar “\(pairing.calendarName)” not found."))
                 continue
             }
-            let events = self.events(in: calendar,
-                                     from: now.addingTimeInterval(-window),
-                                     to: now.addingTimeInterval(window))
-            pending.append((pairing, calendar, events))
+            pending.append((pairing, events(in: calendar,
+                                            from: now.addingTimeInterval(-window),
+                                            to: now.addingTimeInterval(window))))
         }
 
         // Premier démarrage : on enregistre l'existant sans le modifier, pour ne
@@ -358,33 +390,31 @@ final class Engine {
             return result
         }
 
-        var written = 0
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        let historyStart = now.addingTimeInterval(-Double(config.historyYears) * 365 * 86_400)
+        var historyCache: [String: [EKEvent]] = [:]
+        func history(of calendarName: String) -> [EKEvent] {
+            if let cached = historyCache[calendarName] { return cached }
+            guard let calendar = calendarsByTitle[calendarName] else { return [] }
+            let fetched = events(in: calendar, from: historyStart, to: now.addingTimeInterval(window))
+            historyCache[calendarName] = fetched
+            return fetched
+        }
 
-        for (pairing, calendar, events) in pending {
-            let formatStamp = pairing.formatFingerprint + "\u{3}" + appVersion
-            var tasks: [TaskTitle] = []
-            var tasksById: [String: TaskTitle] = [:]
-            if !pairing.reminderListNames.isEmpty {
-                // Triés du plus long au plus court : en correspondance souple,
-                // c'est le titre de tâche le plus spécifique qui doit l'emporter.
-                tasks = fetchTasks(listNames: pairing.reminderListNames, into: &result)
-                    .sorted { $0.normalized.count > $1.normalized.count }
-                for task in tasks { tasksById[task.id] = task }
+        var written = 0
+        var moved = 0
+        for (pairing, calendarEvents) in pending {
+            let ownTasks = allTasks.filter {
+                pairing.reminderListNames.contains($0.reminder.calendar?.title ?? "")
             }
 
-            let historyStart = now.addingTimeInterval(-Double(config.historyYears) * 365 * 86_400)
-            let history = self.events(in: calendar,
-                                      from: historyStart,
-                                      to: now.addingTimeInterval(window))
-
-            for event in events {
+            for event in calendarEvents {
                 guard let id = event.eventIdentifier else { continue }
                 result.seen.append(id)
 
-                // Rattachement à la tâche, du plus fiable au plus approximatif :
-                // l'identifiant inscrit dans la note survit à un changement de
-                // titre du rappel, ce que la comparaison de titres ne fait pas.
+                // Rattachement à la tâche, du plus fiable au plus approximatif.
+                // Le lien inscrit dans le lieu survit à un changement de titre du
+                // rappel, ce que la comparaison de titres ne fait pas.
                 var task: TaskTitle?
                 if !tasksById.isEmpty {
                     if let linked = Self.taskID(inLocation: event.location) {
@@ -398,48 +428,82 @@ final class Engine {
                     }
                     if task == nil {
                         let raw = Self.matchable(event.title, pairing: pairing)
-                        guard !raw.isEmpty,
-                              let matched = Self.matchTask(raw, among: tasks, loose: pairing.looseTitleMatch) else {
-                            if state.records[id] == nil && !state.seen.contains(id) {
-                                result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est une tâche d'aucune des listes : \(pairing.listsSummary).",
-                                                           "Skipped: “\(Self.firstLine(event.title))” is not a task in any of: \(pairing.listsSummary)."))
-                            }
-                            continue
+                        if !raw.isEmpty {
+                            // Les tâches de l'association d'abord : un titre
+                            // identique dans deux listes ne doit pas faire
+                            // basculer un événement déjà bien rangé.
+                            task = Self.matchTask(raw, among: ownTasks, loose: pairing.looseTitleMatch)
+                                ?? Self.matchTask(raw, among: allTasks, loose: pairing.looseTitleMatch)
                         }
-                        task = matched
                     }
                 }
 
-                let fingerprint = task.map {
-                    ReminderDetails.fingerprint(for: $0.reminder) + "\u{3}" + formatStamp
-                } ?? ""
+                guard let task else {
+                    if !pairing.reminderListNames.isEmpty,
+                       state.records[id] == nil, !state.seen.contains(id) {
+                        result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est une tâche d'aucune des listes : \(pairing.listsSummary).",
+                                                   "Skipped: “\(Self.firstLine(event.title))” is not a task in any of: \(pairing.listsSummary)."))
+                    }
+                    continue
+                }
+
+                // Calendrier retient le dernier calendrier utilisé : un rappel
+                // déposé à la suite d'un autre atterrit souvent au mauvais
+                // endroit. On le range d'après la liste dont vient sa tâche.
+                var effective = pairing
+                let listName = task.reminder.calendar?.title ?? ""
+                if config.fileEventsByList,
+                   !pairing.reminderListNames.isEmpty,
+                   !ambiguous.contains(listName),
+                   let target = owner[listName],
+                   target.calendarName != pairing.calendarName,
+                   let destination = calendarsByTitle[target.calendarName] {
+                    event.calendar = destination
+                    effective = target
+                    moved += 1
+                    result.messages.append(L.t("Rangé dans « \(target.calendarName) » : « \(Self.firstLine(event.title)) » vient de \(listName).",
+                                               "Filed into “\(target.calendarName)”: “\(Self.firstLine(event.title))” comes from \(listName)."))
+                }
+
+                let formatStamp = effective.formatFingerprint + "\u{3}" + appVersion
+                let fingerprint = ReminderDetails.fingerprint(for: task.reminder) + "\u{3}" + formatStamp
                 let record = state.records[id]
-                // Un événement est réécrit s'il est nouveau, ou si le rappel a
-                // changé depuis la dernière fois — titre, contenu, achèvement.
                 let isNew = record == nil && !state.seen.contains(id)
                 let changed = record != nil && record?.fingerprint != fingerprint
                 // Lien écrit par une version antérieure, avec le schéma que
                 // macOS n'ouvre pas : il faut le remplacer.
-                let staleLink = pairing.linkReminderInLocation && task != nil
+                let staleLink = effective.linkReminderInLocation
                     && (event.location?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
                         .hasPrefix(Self.legacyReminderScheme)
-                guard isNew || changed || staleLink else {
-                    if let task { result.records[id] = EventRecord(reminderId: task.id, fingerprint: fingerprint) }
+                let relocated = effective.calendarName != pairing.calendarName
+
+                guard isNew || changed || staleLink || relocated else {
+                    result.records[id] = EventRecord(reminderId: task.id, fingerprint: fingerprint)
                     continue
                 }
 
-                if let message = annotate(event, task: task, history: history,
-                                          records: state.records, pairing: pairing) {
+                if let message = annotate(event, task: task,
+                                          history: history(of: effective.calendarName),
+                                          records: state.records, pairing: effective) {
                     result.messages.append(message)
                     written += 1
                 }
-                if let task { result.records[id] = EventRecord(reminderId: task.id, fingerprint: fingerprint) }
+                // Le déplacement peut changer l'identifiant de l'événement.
+                let finalID = event.eventIdentifier ?? id
+                result.seen.append(finalID)
+                result.records[finalID] = EventRecord(reminderId: task.id, fingerprint: fingerprint)
             }
         }
 
-        if written > 0 {
-            result.summary = L.t("\(written) événement(s) mis à jour — \(Self.timeFormatter.string(from: now))",
-                                 "\(written) event(s) updated — \(Self.timeFormatter.string(from: now))")
+        if written > 0 || moved > 0 {
+            var parts: [String] = []
+            if written > 0 {
+                parts.append(L.t("\(written) événement(s) mis à jour", "\(written) event(s) updated"))
+            }
+            if moved > 0 {
+                parts.append(L.t("\(moved) rangé(s)", "\(moved) filed"))
+            }
+            result.summary = parts.joined(separator: ", ") + " — " + Self.timeFormatter.string(from: now)
         }
         return result
     }

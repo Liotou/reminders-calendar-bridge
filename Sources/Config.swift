@@ -206,12 +206,17 @@ struct Config: Codable, Equatable, Sendable {
     var historyYears = 10
     var language: Language = .system
     var checkForUpdates = true
+    /// Calendrier retient le dernier calendrier utilisé : un rappel déposé à la
+    /// suite d'un autre atterrit souvent au mauvais endroit. On range alors
+    /// l'événement d'après la liste dont vient sa tâche.
+    var fileEventsByList = true
     var pairings: [Pairing] = []
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
         case enabled, detectionDays, historyYears, pairings, language, checkForUpdates
+        case fileEventsByList
         // Clés de l'ancien format, à couple unique.
         case calendarName, reminderListName, requireReminderMatch, looseTitleMatch
         case completedPrefix, embedTaskIdentifier, linkReminderInLocation
@@ -232,6 +237,7 @@ struct Config: Codable, Equatable, Sendable {
         historyYears = try c.decodeIfPresent(Int.self, forKey: .historyYears) ?? d.historyYears
         language = try c.decodeIfPresent(Language.self, forKey: .language) ?? d.language
         checkForUpdates = try c.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? d.checkForUpdates
+        fileEventsByList = try c.decodeIfPresent(Bool.self, forKey: .fileEventsByList) ?? d.fileEventsByList
 
         if let decoded = try c.decodeIfPresent([Pairing].self, forKey: .pairings) {
             pairings = decoded.map { var p = $0; p.normalizeSections(); return p }
@@ -275,6 +281,7 @@ struct Config: Codable, Equatable, Sendable {
         try c.encode(historyYears, forKey: .historyYears)
         try c.encode(language, forKey: .language)
         try c.encode(checkForUpdates, forKey: .checkForUpdates)
+        try c.encode(fileEventsByList, forKey: .fileEventsByList)
         try c.encode(pairings, forKey: .pairings)
     }
 }

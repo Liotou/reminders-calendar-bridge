@@ -71,6 +71,16 @@ private struct GeneralTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L.t("Rangement", "Filing")) {
+                Toggle(L.t("Ranger l'événement d'après la liste de sa tâche",
+                           "File the event according to its task's list"),
+                       isOn: $store.config.fileEventsByList)
+                Text(L.t("Calendrier retient le dernier calendrier utilisé : un rappel déposé à la suite d'un autre atterrit souvent au mauvais endroit. L'événement est alors déplacé vers le calendrier associé à sa liste. Une liste rattachée à plusieurs calendriers n'est jamais rangée d'office.",
+                         "Calendar remembers the last calendar used, so a reminder dropped after another often lands in the wrong place. The event is then moved to the calendar paired with its list. A list attached to several calendars is never filed automatically."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L.t("État", "Status")) {
                 LabeledContent(L.t("Calendrier", "Calendar"), value: accessLabel(engine.calendarAccess))
                 LabeledContent(L.t("Rappels", "Reminders"), value: accessLabel(engine.reminderAccess))

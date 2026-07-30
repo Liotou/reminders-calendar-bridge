@@ -82,6 +82,21 @@ Each pairing defines:
 
 with a live preview of the result.
 
+## Filing events by list
+
+Calendar remembers the last calendar you used, so a reminder dropped right after
+another often lands in the wrong one. The app corrects this: once an event is
+attached to its task, it is moved to the calendar paired with the list that task
+belongs to.
+
+Two safeguards:
+
+- a list attached to several calendars has no obvious destination — nothing is
+  moved, and the ambiguity is logged;
+- a pairing with no list ticked is a catch-all and keeps its events.
+
+The setting lives in the General tab and can be turned off.
+
 ## How it works
 
 1. On each notification (coalesced over 2 s to absorb iCloud bursts), the events

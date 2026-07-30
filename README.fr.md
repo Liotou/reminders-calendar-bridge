@@ -80,6 +80,21 @@ Chaque association définit :
 
 avec un aperçu en direct du résultat.
 
+## Rangement d'après la liste
+
+Calendrier retient le dernier calendrier utilisé : un rappel déposé à la suite
+d'un autre atterrit souvent au mauvais endroit. L'application corrige ce
+travers — dès qu'un événement est rattaché à sa tâche, il est déplacé vers le
+calendrier associé à la liste dont vient cette tâche.
+
+Deux garde-fous :
+
+- une liste rattachée à plusieurs calendriers n'a pas de destination évidente :
+  rien n'est déplacé, et l'ambiguïté est signalée dans le journal ;
+- une association sans liste cochée est un fourre-tout et garde ses événements.
+
+Le réglage figure dans l'onglet Général et peut être désactivé.
+
 ## Fonctionnement
 
 1. À chaque notification (regroupée sur 2 s pour absorber les rafales iCloud),
