@@ -475,8 +475,15 @@ final class Engine {
                     }
                 }
 
+                let taskSessions = sessions(of: task, title: event.title,
+                                            history: history(of: effective.calendarName),
+                                            records: state.records, pairing: effective)
                 let formatStamp = effective.formatFingerprint + "\u{3}" + appVersion
-                let fingerprint = ReminderDetails.fingerprint(for: task.reminder) + "\u{3}" + formatStamp
+                // Les horaires des séances entrent dans l'empreinte : allonger un
+                // créneau réécrit sa propre durée et le cumul de ceux qui suivent.
+                let fingerprint = ReminderDetails.fingerprint(for: task.reminder)
+                    + "\u{3}" + formatStamp
+                    + "\u{3}" + Self.sessionsFingerprint(taskSessions)
                 let record = state.records[id]
                 let isNew = record == nil && !state.seen.contains(id)
                 let changed = record != nil && record?.fingerprint != fingerprint
@@ -493,8 +500,7 @@ final class Engine {
                 }
 
                 if let message = annotate(event, task: task,
-                                          history: history(of: effective.calendarName),
-                                          records: state.records, pairing: effective) {
+                                          sessions: taskSessions, pairing: effective) {
                     result.messages.append(message)
                     written += 1
                 }
@@ -546,6 +552,39 @@ final class Engine {
         let reminder: EKReminder
 
         var id: String { reminder.calendarItemIdentifier }
+    }
+
+    /// Toutes les séances d'une même tâche dans un calendrier. Le rattachement
+    /// par identifiant prime : après un changement de titre du rappel, les
+    /// anciennes séances ne portent plus le même intitulé.
+    private nonisolated func sessions(of task: TaskTitle?, title: String?,
+                                      history: [EKEvent], records: [String: EventRecord],
+                                      pairing: Pairing) -> [EKEvent] {
+        let key = task.map { Self.matchable($0.original, pairing: pairing) }
+            ?? Self.matchable(title, pairing: pairing)
+        let loose = pairing.looseTitleMatch && task != nil
+        return history.filter { other in
+            if let task {
+                let otherID = Self.taskID(inLocation: other.location)
+                    ?? Self.embeddedTaskID(in: other.notes)
+                    ?? other.eventIdentifier.flatMap { records[$0]?.reminderId }
+                if let otherID { return otherID == task.id }
+            }
+            let otherTitle = Self.matchable(other.title, pairing: pairing)
+            return otherTitle == key || (loose && otherTitle.hasPrefix(key))
+        }
+    }
+
+    /// Empreinte des horaires de toutes les séances d'une tâche. Sans elle,
+    /// redimensionner un créneau ne réécrirait rien : ni sa propre durée, ni le
+    /// cumul des séances qui le suivent.
+    private nonisolated static func sessionsFingerprint(_ events: [EKEvent]) -> String {
+        events.compactMap { event -> String? in
+            guard let start = event.startDate, let end = event.endDate else { return nil }
+            return "\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))"
+        }
+        .sorted()
+        .joined(separator: ",")
     }
 
     private nonisolated func fetchTasks(listNames: [String], into result: inout ScanResult) -> [TaskTitle] {
@@ -615,27 +654,15 @@ final class Engine {
 
     // MARK: - Écriture
 
-    private nonisolated func annotate(_ event: EKEvent, task: TaskTitle?, history: [EKEvent],
-                                      records: [String: EventRecord], pairing: Pairing) -> String? {
+    private nonisolated func annotate(_ event: EKEvent, task: TaskTitle?,
+                                      sessions: [EKEvent], pairing: Pairing) -> String? {
         guard let start = event.startDate else { return nil }
 
-        // Occurrences antérieures de la même tâche. Le rattachement par
-        // identifiant prime : après un changement de titre du rappel, les
-        // anciennes séances ne portent plus le même intitulé.
-        let key = task.map { Self.matchable($0.original, pairing: pairing) }
-            ?? Self.matchable(event.title, pairing: pairing)
-        let loose = pairing.looseTitleMatch && task != nil
-        let previous = history.filter { other in
-            guard other.eventIdentifier != event.eventIdentifier,
-                  (other.endDate ?? .distantPast) <= start else { return false }
-            if let task {
-                let otherID = Self.taskID(inLocation: other.location)
-                    ?? Self.embeddedTaskID(in: other.notes)
-                    ?? other.eventIdentifier.flatMap { records[$0]?.reminderId }
-                if let otherID { return otherID == task.id }
-            }
-            let title = Self.matchable(other.title, pairing: pairing)
-            return title == key || (loose && title.hasPrefix(key))
+        // Séances antérieures : celles qui s'achèvent avant le début de la
+        // session courante.
+        let previous = sessions.filter { other in
+            other.eventIdentifier != event.eventIdentifier
+                && (other.endDate ?? .distantPast) <= start
         }
         let previousTotal = previous.reduce(0.0) { sum, e in
             guard let s = e.startDate, let end = e.endDate else { return sum }
@@ -706,8 +733,8 @@ final class Engine {
 
         do {
             try store.save(event, span: .thisEvent, commit: true)
-            return L.t("Écrit : « \(displayTitle) » — session n°\(previous.count + 1) sur \(history.count) événement(s) examiné(s)",
-                       "Written: “\(displayTitle)” — session #\(previous.count + 1) across \(history.count) event(s) examined")
+            return L.t("Écrit : « \(displayTitle) » — session n°\(previous.count + 1) sur \(sessions.count) séance(s)",
+                       "Written: “\(displayTitle)” — session #\(previous.count + 1) of \(sessions.count) session(s)")
         } catch {
             return L.t("Échec sur « \(displayTitle) » : \(error.localizedDescription)",
                        "Failed on “\(displayTitle)”: \(error.localizedDescription)")
