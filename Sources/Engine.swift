@@ -192,7 +192,7 @@ final class Engine {
         if let exact = store.calendarItem(withIdentifier: token) as? EKReminder { return exact }
 
         let lists = store.calendars(for: .reminder).filter { calendar in
-            config.pairings.contains { $0.enabled && $0.reminderListName == calendar.title }
+            config.pairings.contains { $0.enabled && $0.reminderListNames.contains(calendar.title) }
         }
         guard !lists.isEmpty else { return nil }
 
@@ -365,10 +365,10 @@ final class Engine {
             let formatStamp = pairing.formatFingerprint + "\u{3}" + appVersion
             var tasks: [TaskTitle] = []
             var tasksById: [String: TaskTitle] = [:]
-            if !pairing.reminderListName.isEmpty {
+            if !pairing.reminderListNames.isEmpty {
                 // Triés du plus long au plus court : en correspondance souple,
                 // c'est le titre de tâche le plus spécifique qui doit l'emporter.
-                tasks = fetchTasks(listName: pairing.reminderListName, into: &result)
+                tasks = fetchTasks(listNames: pairing.reminderListNames, into: &result)
                     .sorted { $0.normalized.count > $1.normalized.count }
                 for task in tasks { tasksById[task.id] = task }
             }
@@ -401,8 +401,8 @@ final class Engine {
                         guard !raw.isEmpty,
                               let matched = Self.matchTask(raw, among: tasks, loose: pairing.looseTitleMatch) else {
                             if state.records[id] == nil && !state.seen.contains(id) {
-                                result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est pas une tâche de \(pairing.reminderListName).",
-                                                           "Skipped: “\(Self.firstLine(event.title))” is not a task in \(pairing.reminderListName)."))
+                                result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est une tâche d'aucune des listes : \(pairing.listsSummary).",
+                                                           "Skipped: “\(Self.firstLine(event.title))” is not a task in any of: \(pairing.listsSummary)."))
                             }
                             continue
                         }
@@ -474,15 +474,20 @@ final class Engine {
         var id: String { reminder.calendarItemIdentifier }
     }
 
-    private nonisolated func fetchTasks(listName: String, into result: inout ScanResult) -> [TaskTitle] {
-        guard let list = store.calendars(for: .reminder).first(where: { $0.title == listName }) else {
-            result.messages.append(L.t("Liste de rappels « \(listName) » introuvable.",
-                                       "Reminder list “\(listName)” not found."))
-            return []
+    private nonisolated func fetchTasks(listNames: [String], into result: inout ScanResult) -> [TaskTitle] {
+        let available = store.calendars(for: .reminder)
+        let lists = listNames.compactMap { name in
+            available.first { $0.title == name }
         }
+        for missing in listNames where !available.contains(where: { $0.title == missing }) {
+            result.messages.append(L.t("Liste de rappels « \(missing) » introuvable.",
+                                       "Reminder list “\(missing)” not found."))
+        }
+        guard !lists.isEmpty else { return [] }
+
         var tasks: [TaskTitle] = []
         let semaphore = DispatchSemaphore(value: 0)
-        store.fetchReminders(matching: store.predicateForReminders(in: [list])) { reminders in
+        store.fetchReminders(matching: store.predicateForReminders(in: lists)) { reminders in
             tasks = (reminders ?? []).map {
                 TaskTitle(normalized: Self.normalize($0.title), original: $0.title ?? "", reminder: $0)
             }

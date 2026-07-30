@@ -54,15 +54,19 @@ Menu bar → **Settings…**
 
 ## Pairings
 
-A pairing links **one reminder list to one calendar**. There can be as many as
-you like, each with its own formatting:
+A pairing links **one or more reminder lists to one calendar**. There can be as
+many pairings as you like, each with its own formatting:
 
 ```
-Doctorate - Tasks          →  Work sessions
-Doctorate - Reading tasks  →  Reading sessions
+Doctorate - Tasks, Doctorate - Writing  →  Work sessions
+Doctorate - Reading                     →  Reading sessions
 ```
 
-The same calendar may appear in several pairings. An empty list ("None")
+When several lists feed the same calendar, each task keeps its own identity:
+the list it belongs to appears on the first line of the "Task information"
+section, so a glance at an event tells you where the task lives.
+
+The same calendar may appear in several pairings. Ticking no list at all
 processes every event of the calendar and groups them on their own title,
 without going through Reminders.
 

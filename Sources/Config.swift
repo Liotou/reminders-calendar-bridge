@@ -59,9 +59,10 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
     var id = UUID()
     var enabled = true
     var calendarName = ""
-    /// Vide : aucun filtre, tous les événements du calendrier sont traités et
+    /// Une ou plusieurs listes de rappels alimentent le même calendrier. Vide :
+    /// aucun filtre, tous les événements du calendrier sont traités et
     /// regroupés sur leur propre titre.
-    var reminderListName = ""
+    var reminderListNames: [String] = []
 
     var looseTitleMatch = true
     /// Préfixe apposé au titre de l'événement quand la tâche est terminée.
@@ -85,9 +86,14 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
     var showGrandTotal = true
 
     var displayName: String {
-        let list = reminderListName.isEmpty ? "toutes les entrées" : reminderListName
-        let cal = calendarName.isEmpty ? "(aucun calendrier)" : calendarName
-        return "\(list)  →  \(cal)"
+        let cal = calendarName.isEmpty ? L.t("(aucun calendrier)", "(no calendar)") : calendarName
+        return "\(listsSummary)  →  \(cal)"
+    }
+
+    var listsSummary: String {
+        reminderListNames.isEmpty
+            ? L.t("Toutes les entrées", "All entries")
+            : reminderListNames.joined(separator: ", ")
     }
 
     init() {}
@@ -101,7 +107,13 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
         calendarName = try c.decodeIfPresent(String.self, forKey: .calendarName) ?? d.calendarName
-        reminderListName = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? d.reminderListName
+        // Le couple à liste unique devient une association à plusieurs listes.
+        if let names = try c.decodeIfPresent([String].self, forKey: .reminderListNames) {
+            reminderListNames = names
+        } else if let single = try c.decodeIfPresent(String.self, forKey: .reminderListName),
+                  !single.isEmpty {
+            reminderListNames = [single]
+        }
         looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? d.looseTitleMatch
         completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? d.completedPrefix
         embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? d.embedTaskIdentifier
@@ -118,11 +130,35 @@ struct Pairing: Codable, Equatable, Identifiable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, enabled, calendarName, reminderListName, looseTitleMatch
+        case id, enabled, calendarName, reminderListNames, looseTitleMatch
         case completedPrefix, embedTaskIdentifier, linkReminderInLocation
         case sections, personalPlaceholder
         case preserveExistingNotes, showSessionNumber, showCurrentDuration
         case showPreviousTotal, showLastSessionDate, showGrandTotal
+        /// Ancien nom, à liste unique : relu, jamais réécrit.
+        case reminderListName
+    }
+
+    /// Écrit explicitement, car `reminderListName` n'a plus de propriété : le
+    /// codeur synthétisé ne saurait qu'en faire.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encode(calendarName, forKey: .calendarName)
+        try c.encode(reminderListNames, forKey: .reminderListNames)
+        try c.encode(looseTitleMatch, forKey: .looseTitleMatch)
+        try c.encode(completedPrefix, forKey: .completedPrefix)
+        try c.encode(embedTaskIdentifier, forKey: .embedTaskIdentifier)
+        try c.encode(linkReminderInLocation, forKey: .linkReminderInLocation)
+        try c.encode(sections, forKey: .sections)
+        try c.encode(personalPlaceholder, forKey: .personalPlaceholder)
+        try c.encode(preserveExistingNotes, forKey: .preserveExistingNotes)
+        try c.encode(showSessionNumber, forKey: .showSessionNumber)
+        try c.encode(showCurrentDuration, forKey: .showCurrentDuration)
+        try c.encode(showPreviousTotal, forKey: .showPreviousTotal)
+        try c.encode(showLastSessionDate, forKey: .showLastSessionDate)
+        try c.encode(showGrandTotal, forKey: .showGrandTotal)
     }
 
     /// Empreinte des réglages qui déterminent le texte écrit. Elle entre dans
@@ -207,7 +243,7 @@ struct Config: Codable, Equatable, Sendable {
         p.calendarName = try c.decodeIfPresent(String.self, forKey: .calendarName) ?? ""
         let requireMatch = try c.decodeIfPresent(Bool.self, forKey: .requireReminderMatch) ?? true
         let list = try c.decodeIfPresent(String.self, forKey: .reminderListName) ?? ""
-        p.reminderListName = requireMatch ? list : ""
+        p.reminderListNames = (requireMatch && !list.isEmpty) ? [list] : []
         p.looseTitleMatch = try c.decodeIfPresent(Bool.self, forKey: .looseTitleMatch) ?? p.looseTitleMatch
         p.completedPrefix = try c.decodeIfPresent(String.self, forKey: .completedPrefix) ?? p.completedPrefix
         p.embedTaskIdentifier = try c.decodeIfPresent(Bool.self, forKey: .embedTaskIdentifier) ?? p.embedTaskIdentifier

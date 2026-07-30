@@ -176,8 +176,7 @@ private struct PairingsTab: View {
                                 .labelsHidden()
                                 .toggleStyle(.checkbox)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(pairing.reminderListName.isEmpty
-                                     ? L.t("Toutes les entrées", "All entries") : pairing.reminderListName)
+                                Text(pairing.listsSummary)
                                     .lineLimit(1)
                                 Text(pairing.calendarName.isEmpty
                                      ? L.t("(aucun calendrier)", "(no calendar)") : pairing.calendarName)
@@ -195,7 +194,7 @@ private struct PairingsTab: View {
                     Button {
                         var new = Pairing()
                         new.calendarName = engine.availableCalendars.first ?? ""
-                        new.reminderListName = engine.availableReminderLists.first ?? ""
+                        new.reminderListNames = engine.availableReminderLists.prefix(1).map { $0 }
                         store.config.pairings.append(new)
                         selection = new.id
                     } label: { Image(systemName: "plus") }
@@ -236,12 +235,30 @@ private struct PairingDetail: View {
     var body: some View {
         Form {
             Section(L.t("Sources", "Sources")) {
-                Picker(L.t("Liste de rappels", "Reminder list"), selection: $pairing.reminderListName) {
-                    Text(L.t("Aucune (tous les événements)", "None (every event)")).tag("")
-                    ForEach(options(engine.availableReminderLists, pairing.reminderListName), id: \.self) {
-                        Text($0).tag($0)
+                LabeledContent(L.t("Listes de rappels", "Reminder lists")) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(options(engine.availableReminderLists, pairing.reminderListNames), id: \.self) { name in
+                            Toggle(name, isOn: Binding(
+                                get: { pairing.reminderListNames.contains(name) },
+                                set: { on in
+                                    if on {
+                                        if !pairing.reminderListNames.contains(name) {
+                                            pairing.reminderListNames.append(name)
+                                        }
+                                    } else {
+                                        pairing.reminderListNames.removeAll { $0 == name }
+                                    }
+                                }))
+                        }
                     }
                 }
+                Text(pairing.reminderListNames.isEmpty
+                     ? L.t("Aucune liste cochée : tous les événements du calendrier sont traités et regroupés sur leur propre titre.",
+                           "No list ticked: every event of the calendar is processed and grouped on its own title.")
+                     : L.t("Plusieurs listes peuvent alimenter le même calendrier. La liste d'appartenance de chaque tâche figure dans la section « Informations de la tâche ».",
+                           "Several lists may feed the same calendar. Each task's own list appears in the “Task information” section."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker(L.t("Calendrier", "Calendar"), selection: $pairing.calendarName) {
                     ForEach(options(engine.availableCalendars, pairing.calendarName), id: \.self) {
                         Text($0).tag($0)
@@ -250,7 +267,7 @@ private struct PairingDetail: View {
                 Toggle(L.t("Tolérer un suffixe après le titre de la tâche",
                            "Allow a suffix after the task title"),
                        isOn: $pairing.looseTitleMatch)
-                    .disabled(pairing.reminderListName.isEmpty)
+                    .disabled(pairing.reminderListNames.isEmpty)
                 Text(L.t("Le glisser-déposer d'un rappel ajoute sa note au titre. Le titre de l'événement est ensuite ramené à celui de la tâche.",
                          "Dragging a reminder appends its notes to the title. The event title is then reduced to the task title."))
                     .font(.caption)
@@ -261,7 +278,7 @@ private struct PairingDetail: View {
                 Toggle(L.t("Lien vers le rappel dans « Lieu ou appel vidéo »",
                            "Link to the reminder in “Location or Video Call”"),
                        isOn: $pairing.linkReminderInLocation)
-                    .disabled(pairing.reminderListName.isEmpty)
+                    .disabled(pairing.reminderListNames.isEmpty)
                 Text(L.t("Cliquable pour ouvrir la tâche dans Rappels, et fait office d'identifiant durable. Un lieu saisi à la main n'est jamais écrasé.",
                          "Clickable to open the task in Reminders, and doubles as a durable identifier. A location you typed yourself is never overwritten."))
                     .font(.caption)
@@ -269,7 +286,7 @@ private struct PairingDetail: View {
                 Toggle(L.t("Inscrire aussi l'identifiant en fin de note",
                            "Also write the identifier at the end of the notes"),
                        isOn: $pairing.embedTaskIdentifier)
-                    .disabled(pairing.reminderListName.isEmpty)
+                    .disabled(pairing.reminderListNames.isEmpty)
                 Text(L.t("Redondant avec le lien ci-dessus. Utile si vous réservez le champ « Lieu » à un véritable lieu.",
                          "Redundant with the link above. Useful if you keep the location field for an actual place."))
                     .font(.caption)
@@ -342,16 +359,22 @@ private struct PairingDetail: View {
         available.contains(current) || current.isEmpty ? available : ([current] + available)
     }
 
+    /// Les listes enregistrées mais disparues restent affichées, pour que leur
+    /// retrait soit un geste délibéré plutôt qu'un effet de bord.
+    private func options(_ available: [String], _ current: [String]) -> [String] {
+        available + current.filter { !available.contains($0) }
+    }
+
     private var preview: String {
         var taskInfo: [String] = []
-        if !pairing.reminderListName.isEmpty {
-            taskInfo = ["\(L.t("Liste", "List")) : \(pairing.reminderListName)",
+        if !pairing.reminderListNames.isEmpty {
+            taskInfo = ["\(L.t("Liste", "List")) : \(pairing.reminderListNames.first ?? "")",
                         "\(L.t("Échéance", "Due")) : \(L.t("14 septembre 2026", "September 14, 2026"))",
                         "\(L.t("Priorité", "Priority")) : \(L.t("haute", "high"))",
                         "\(L.t("Commentaires", "Notes")) : \(L.t("voir le compte rendu du 3 juillet", "see the July 3 minutes"))"]
         }
         var actions: [String] = []
-        if !pairing.reminderListName.isEmpty {
+        if !pairing.reminderListNames.isEmpty {
             actions = [L.t("Marquer terminée  rcb://complete/5C1FA93B",
                            "Mark as completed  rcb://complete/5C1FA93B"),
                        L.t("Ouvrir la tâche  rcb://open/5C1FA93B",
@@ -366,13 +389,13 @@ private struct PairingDetail: View {
         if pairing.showGrandTotal { stats.append(L.t("Cumul : 16 h 45", "Total: 16 h 45")) }
 
         var text = ""
-        if pairing.linkReminderInLocation && !pairing.reminderListName.isEmpty {
+        if pairing.linkReminderInLocation && !pairing.reminderListNames.isEmpty {
             text += L.t("Lieu : x-apple-reminderkit://REMCDReminder/5C1F…A93\n\n",
                         "Location: x-apple-reminderkit://REMCDReminder/5C1F…A93\n\n")
         }
         text += NotesComposer(pairing: pairing)
             .compose(existing: "", taskInfo: taskInfo, stats: stats, actions: actions)
-        if pairing.embedTaskIdentifier && !pairing.reminderListName.isEmpty {
+        if pairing.embedTaskIdentifier && !pairing.reminderListNames.isEmpty {
             text += "\n\n⟦rcb:5C1F…A93⟧"
         }
         return text

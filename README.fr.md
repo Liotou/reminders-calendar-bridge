@@ -52,17 +52,23 @@ Menu de la barre de menus → **Réglages…**
 
 ## Associations
 
-Une association relie **une liste de rappels à un calendrier**. Il peut y en
-avoir autant que voulu, et chacune a sa propre mise en forme :
+Une association relie **une ou plusieurs listes de rappels à un calendrier**. Il
+peut y avoir autant d'associations que voulu, et chacune a sa propre mise en
+forme :
 
 ```
-Doctorat - Tâches           →  Sessions de travail
-Doctorat - Tâches de lecture →  Sessions de lecture
+Doctorat - Tâches, Doctorat - Rédaction  →  Sessions de travail
+Doctorat - Lecture                       →  Sessions de lecture
 ```
 
-Un même calendrier peut apparaître dans plusieurs associations. Une liste vide
-(« Aucune ») traite tous les événements du calendrier et les regroupe sur leur
-propre titre, sans passer par Rappels.
+Quand plusieurs listes alimentent le même calendrier, chaque tâche garde son
+identité : sa liste d'appartenance figure en première ligne de la section
+« Informations de la tâche ». Un coup d'œil à l'événement suffit donc à savoir
+d'où vient la tâche.
+
+Un même calendrier peut apparaître dans plusieurs associations. Ne cocher aucune
+liste traite tous les événements du calendrier et les regroupe sur leur propre
+titre, sans passer par Rappels.
 
 Chaque association définit :
 
