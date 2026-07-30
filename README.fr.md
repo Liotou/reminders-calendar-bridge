@@ -87,11 +87,19 @@ d'un autre atterrit souvent au mauvais endroit. L'application corrige ce
 travers — dès qu'un événement est rattaché à sa tâche, il est déplacé vers le
 calendrier associé à la liste dont vient cette tâche.
 
-Deux garde-fous :
+Les calendriers associés à rien sont balayés eux aussi — le dernier calendrier
+utilisé peut très bien en être un. Une tâche n'y est reconnue que sur un indice
+certain : le lien du rappel dans le lieu, l'identifiant en note, ou le fichier
+d'état local. Jamais sur une ressemblance de titres, pour qu'un rendez-vous
+personnel nommé comme une tâche ne quitte jamais votre calendrier privé.
+
+Trois garde-fous :
 
 - une liste rattachée à plusieurs calendriers n'a pas de destination évidente :
   rien n'est déplacé, et l'ambiguïté est signalée dans le journal ;
-- une association sans liste cochée est un fourre-tout et garde ses événements.
+- une association sans liste cochée est un fourre-tout et garde ses événements ;
+- les calendriers en lecture seule (anniversaires, jours fériés) ne sont pas
+  touchés.
 
 Le réglage figure dans l'onglet Général et peut être désactivé.
 
@@ -185,6 +193,11 @@ C'est ce lien qui rend le suivi possible. Si vous renommez un rappel, ou en
 changez l'échéance, la priorité ou les commentaires, tous les événements qui en
 dépendent sont mis à jour au prochain passage — titre compris. Une comparaison
 de titres ne le permettrait pas : après renommage, plus rien ne correspondrait.
+
+Redimensionner un créneau met aussi les statistiques à jour — sa propre durée
+et le cumul de toutes les séances suivantes de la même tâche. Les horaires de
+l'ensemble des séances entrent dans l'empreinte de l'événement, ce qui déclenche
+la réécriture.
 
 Les statistiques ne sont jamais perdues dans l'opération : elles ne sont pas
 stockées, elles sont recalculées depuis le calendrier à chaque écriture. Les

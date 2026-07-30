@@ -89,11 +89,18 @@ another often lands in the wrong one. The app corrects this: once an event is
 attached to its task, it is moved to the calendar paired with the list that task
 belongs to.
 
-Two safeguards:
+Calendars that are not paired with anything are swept too — the last calendar
+you used may well be one of them. There, a task is only recognised on a certain
+clue: the reminder link in the location, the identifier in the notes, or the
+local state file. Never on a resemblance of titles, so that a private
+appointment named like a task is never moved out of your own calendar.
+
+Three safeguards:
 
 - a list attached to several calendars has no obvious destination — nothing is
   moved, and the ambiguity is logged;
-- a pairing with no list ticked is a catch-all and keeps its events.
+- a pairing with no list ticked is a catch-all and keeps its events;
+- read-only calendars (birthdays, holidays) are left alone.
 
 The setting lives in the General tab and can be turned off.
 
@@ -184,6 +191,11 @@ That link is what makes tracking possible. Rename a reminder, or change its due
 date, priority or notes, and every event that depends on it is updated on the
 next pass — title included. Title comparison alone could not do this: after a
 rename, nothing would match any more.
+
+Resizing a slot updates the statistics as well — its own duration and the
+running total of every later session of the same task. The timings of all the
+task's sessions take part in the event fingerprint, which is what triggers the
+rewrite.
 
 Statistics are never lost in the process: they are not stored, they are
 recomputed from the calendar on every write. Personal notes are carried over
