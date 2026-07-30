@@ -458,11 +458,21 @@ final class Engine {
                    let target = owner[listName],
                    target.calendarName != pairing.calendarName,
                    let destination = calendarsByTitle[target.calendarName] {
+                    // Le déplacement doit être écrit seul : EventKit le traite
+                    // comme un changement d'enregistrement, et le titre ou les
+                    // notes modifiés dans la même sauvegarde sont perdus — la
+                    // sauvegarde réussit pourtant, sans rien signaler.
                     event.calendar = destination
-                    effective = target
-                    moved += 1
-                    result.messages.append(L.t("Rangé dans « \(target.calendarName) » : « \(Self.firstLine(event.title)) » vient de \(listName).",
-                                               "Filed into “\(target.calendarName)”: “\(Self.firstLine(event.title))” comes from \(listName)."))
+                    do {
+                        try store.save(event, span: .thisEvent, commit: true)
+                        effective = target
+                        moved += 1
+                        result.messages.append(L.t("Rangé dans « \(target.calendarName) » : « \(Self.firstLine(event.title)) » vient de \(listName).",
+                                                   "Filed into “\(target.calendarName)”: “\(Self.firstLine(event.title))” comes from \(listName)."))
+                    } catch {
+                        result.messages.append(L.t("Rangement impossible vers « \(target.calendarName) » : \(error.localizedDescription)",
+                                                   "Could not file into “\(target.calendarName)”: \(error.localizedDescription)"))
+                    }
                 }
 
                 let formatStamp = effective.formatFingerprint + "\u{3}" + appVersion
