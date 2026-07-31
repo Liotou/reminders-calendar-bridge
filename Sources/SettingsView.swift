@@ -1,23 +1,6 @@
 import SwiftUI
 import ServiceManagement
 
-/// Liquid Glass s'applique de lui-même aux contrôles standard dès lors que
-/// l'application est compilée avec le SDK de macOS 26. Seuls les styles de
-/// bouton en verre demandent une adoption explicite — et ce SDK n'expose pas,
-/// côté macOS, le modificateur libre `glassEffect` disponible sur iOS.
-private extension View {
-    @ViewBuilder
-    func glassButton(prominent: Bool = false) -> some View {
-        if #available(macOS 26.0, *) {
-            if prominent { buttonStyle(.glassProminent) } else { buttonStyle(.glass) }
-        } else if prominent {
-            buttonStyle(.borderedProminent)
-        } else {
-            buttonStyle(.bordered)
-        }
-    }
-}
-
 struct SettingsView: View {
     @State private var store = ConfigStore.shared
     @State private var engine = Engine.shared
@@ -31,10 +14,7 @@ struct SettingsView: View {
             LogTab(engine: engine)
                 .tabItem { Label(L.t("Journal", "Log"), systemImage: "list.bullet.rectangle") }
         }
-        .symbolRenderingMode(.hierarchical)
-        // Dimensions minimales plutôt que fixes : la fenêtre reste
-        // redimensionnable, comme l'attendent les réglages système.
-        .frame(minWidth: 720, idealWidth: 780, minHeight: 560, idealHeight: 640)
+        .frame(width: 700, height: 580)
         .onAppear {
             engine.refreshSources()
             Self.bringToFront()
@@ -108,11 +88,8 @@ private struct GeneralTab: View {
                 LabeledContent(L.t("Dernière activité", "Last activity"), value: engine.lastActivity)
                 HStack {
                     Button(L.t("Analyser maintenant", "Scan now")) { engine.scanNow() }
-                        .glassButton()
                     Button(L.t("Oublier l'état", "Forget state")) { engine.forgetState() }
-                        .glassButton()
                     Button(L.t("Retraiter tout l'historique", "Reprocess everything")) { confirmReprocess = true }
-                        .glassButton()
                 }
             }
 
@@ -123,10 +100,9 @@ private struct GeneralTab: View {
                 updateStatus
                 HStack {
                     Button(L.t("Vérifier maintenant", "Check now")) { updater.check() }
-                        .glassButton()
                     if case .available = updater.state {
                         Button(L.t("Installer et relancer", "Install and relaunch")) { updater.install() }
-                            .glassButton(prominent: true)
+                            .buttonStyle(.borderedProminent)
                     }
                     Link(L.t("Voir les publications", "View releases"), destination: Updater.releasesURL)
                 }
@@ -201,56 +177,50 @@ private struct PairingsTab: View {
     @State private var selection: Pairing.ID?
 
     var body: some View {
-        // NavigationSplitView plutôt qu'un HSplitView fait main : la barre
-        // latérale reçoit ainsi le matériau et le comportement natifs, et la
-        // barre d'outils accueille les commandes au bon endroit.
-        NavigationSplitView {
-            List(selection: $selection) {
-                ForEach($store.config.pairings) { $pairing in
-                    HStack(spacing: 10) {
-                        Toggle("", isOn: $pairing.enabled)
-                            .labelsHidden()
-                            .toggleStyle(.checkbox)
-                            .help(L.t("Association active", "Pairing enabled"))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pairing.listsSummary)
-                                .lineLimit(1)
-                            Label(pairing.calendarName.isEmpty
-                                  ? L.t("aucun calendrier", "no calendar") : pairing.calendarName,
-                                  systemImage: "calendar")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+        HSplitView {
+            VStack(spacing: 0) {
+                List(selection: $selection) {
+                    ForEach($store.config.pairings) { $pairing in
+                        HStack {
+                            Toggle("", isOn: $pairing.enabled)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(pairing.listsSummary)
+                                    .lineLimit(1)
+                                Text(pairing.calendarName.isEmpty
+                                     ? L.t("(aucun calendrier)", "(no calendar)") : pairing.calendarName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
+                        .tag(pairing.id)
                     }
-                    .padding(.vertical, 2)
-                    .tag(pairing.id)
+                    .onMove { store.config.pairings.move(fromOffsets: $0, toOffset: $1) }
                 }
-                .onMove { store.config.pairings.move(fromOffsets: $0, toOffset: $1) }
-            }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
-            .toolbar {
-                ToolbarItemGroup {
+
+                HStack(spacing: 4) {
                     Button {
                         var new = Pairing()
                         new.calendarName = engine.availableCalendars.first ?? ""
                         new.reminderListNames = engine.availableReminderLists.prefix(1).map { $0 }
                         store.config.pairings.append(new)
                         selection = new.id
-                    } label: {
-                        Label(L.t("Ajouter une association", "Add a pairing"), systemImage: "plus")
-                    }
+                    } label: { Image(systemName: "plus") }
 
                     Button {
                         store.config.pairings.removeAll { $0.id == selection }
                         selection = store.config.pairings.first?.id
-                    } label: {
-                        Label(L.t("Retirer l'association", "Remove the pairing"), systemImage: "minus")
-                    }
-                    .disabled(selection == nil)
+                    } label: { Image(systemName: "minus") }
+                        .disabled(selection == nil)
+                    Spacer()
                 }
+                .buttonStyle(.borderless)
+                .padding(6)
             }
-        } detail: {
+            .frame(minWidth: 200, idealWidth: 230, maxWidth: 300)
+
             Group {
                 if let index = store.config.pairings.firstIndex(where: { $0.id == selection }) {
                     PairingDetail(pairing: $store.config.pairings[index], engine: engine)
@@ -258,13 +228,12 @@ private struct PairingsTab: View {
                     ContentUnavailableView(
                         L.t("Aucune association sélectionnée", "No pairing selected"),
                         systemImage: "arrow.triangle.branch",
-                        description: Text(L.t("Chaque association relie une ou plusieurs listes de rappels à un calendrier, avec sa propre mise en forme.",
-                                              "Each pairing links one or more reminder lists to a calendar, with its own formatting.")))
+                        description: Text(L.t("Chaque association relie une liste de rappels à un calendrier, avec sa propre mise en forme.",
+                                              "Each pairing links a reminder list to a calendar, with its own formatting.")))
                 }
             }
-            .navigationSplitViewColumnWidth(min: 420, ideal: 500)
+            .frame(minWidth: 380)
         }
-        .navigationSplitViewStyle(.balanced)
         .onAppear { if selection == nil { selection = store.config.pairings.first?.id } }
     }
 }
@@ -389,8 +358,6 @@ private struct PairingDetail: View {
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 10))
             }
         }
         .formStyle(.grouped)
@@ -463,7 +430,7 @@ private struct LogTab: View {
                 }
                 .padding(8)
             }
-            .background(.quinary, in: .rect(cornerRadius: 12))
+            .background(.quinary, in: RoundedRectangle(cornerRadius: 6))
 
             HStack {
                 Text("~/Library/Application Support/RemindersCalendarBridge/")
@@ -473,9 +440,8 @@ private struct LogTab: View {
                 Button(L.t("Révéler dans le Finder", "Reveal in Finder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([Engine.logURL])
                 }
-                .glassButton()
             }
         }
-        .scenePadding()
+        .padding()
     }
 }
