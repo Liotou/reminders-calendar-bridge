@@ -1,21 +1,41 @@
 # Reminders → Calendar Bridge
 
-A macOS menu-bar app that bridges Apple Reminders and Apple Calendar: it watches
-the calendars of your choice in real time and writes, into the description of
-each new session, the properties of the matching task and the cumulative time
-already spent on the same work.
+**Block time for a task in Apple Calendar — and keep the task with it.**
 
-No polling: the app stays awake and subscribes to the system's
-`EKEventStoreChanged` notification, emitted whenever the Calendar or Reminders
-database changes — including when an event created on an iPhone finishes syncing
-to the Mac.
+![A reminder dragged from Apple Reminders into Apple Calendar, the event showing the task's list, due date, running time and personal notes](docs/screenshot.png)
 
-The bundle identifier remains `fr.equiriconi.SessionsStats`, the name the app
-carried at first. That identifier is what macOS ties the Calendar and Reminders
-permissions to, along with the settings and the record of already processed
-events. Changing it would reset all of them.
+Dragging a reminder onto your calendar gives you a block of time and nothing
+else. The event is a dead copy: rename the task and the event keeps the old
+title, work three sessions on it and nothing tells you how long it took, drop it
+while another calendar happened to be selected and it stays in the wrong place.
+
+This app keeps the two alive together, in real time, on your Mac.
+
+- **Every session carries its task.** List, due date, priority, notes — read
+  from the reminder itself and refreshed whenever it changes, including the
+  event's title.
+- **Time adds up.** *Session #8 — this session: 2 h 30 — total: 16 h 45.*
+  Resize a slot and every later session recounts itself.
+- **Your own notes are safe.** A protected section is never rewritten, not even
+  by a full reprocess. That is where you write what you actually got done.
+- **One click back to the task**, plus links to tick it off without leaving
+  Calendar. A completed task marks all its past sessions.
+- **Events file themselves.** Dropped in the wrong calendar, an event moves to
+  the one paired with its task's list.
+- **No polling.** The app sleeps until macOS says the Calendar or Reminders
+  database changed — including when an event created on an iPhone finishes
+  syncing to the Mac.
+- **Nothing leaves your Mac**, apart from a once-a-day update check.
+
+Several reminder lists can feed the same calendar, or each get their own: tasks,
+reading, writing, whatever your ontology turns out to be.
 
 *Le README est également disponible en français : [README.fr.md](README.fr.md).*
+
+> The bundle identifier remains `fr.equiriconi.SessionsStats`, the name the app
+> carried at first. That identifier is what macOS ties the Calendar and
+> Reminders permissions to, along with the settings and the record of already
+> processed events. Changing it would reset all of them.
 
 ## Installation
 

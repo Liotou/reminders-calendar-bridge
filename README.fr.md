@@ -1,21 +1,46 @@
 # Reminders → Calendar Bridge
 
+**Réservez du temps pour une tâche dans Calendrier — et gardez la tâche avec.**
+
+![Un rappel glissé depuis Apple Rappels vers Apple Calendrier, l'événement affichant la liste, l'échéance, le temps cumulé et les notes personnelles](docs/screenshot.png)
+
+Déposer un rappel sur votre calendrier vous donne un créneau, et rien d'autre.
+L'événement est une copie morte : renommez la tâche, il garde l'ancien titre ;
+travaillez-y trois séances, rien ne vous dit combien de temps cela vous a pris ;
+déposez-le alors qu'un autre calendrier était sélectionné, il y reste.
+
+Cette application maintient les deux vivants ensemble, en temps réel, sur votre
+Mac.
+
+- **Chaque séance porte sa tâche.** Liste, échéance, priorité, commentaires —
+  relevés sur le rappel lui-même et rafraîchis dès qu'il change, titre de
+  l'événement compris.
+- **Le temps s'additionne.** *Session n°8 — cette session : 2 h 30 — cumul :
+  16 h 45.* Redimensionnez un créneau, et toutes les séances suivantes se
+  recomptent.
+- **Vos notes sont à l'abri.** Une section protégée n'est jamais réécrite, pas
+  même par un retraitement complet. C'est là qu'écrire ce que vous avez
+  réellement accompli.
+- **Un clic pour revenir à la tâche**, et des liens pour la cocher sans quitter
+  Calendrier. Une tâche terminée marque toutes ses séances passées.
+- **Les événements se rangent seuls.** Déposé dans le mauvais calendrier, un
+  événement rejoint celui associé à la liste de sa tâche.
+- **Aucune scrutation périodique.** L'application dort jusqu'à ce que macOS
+  signale un changement dans Calendrier ou Rappels — y compris quand un
+  événement créé sur iPhone achève de se synchroniser sur le Mac.
+- **Rien ne sort de votre Mac**, hormis une vérification de mise à jour
+  quotidienne.
+
+Plusieurs listes de rappels peuvent alimenter le même calendrier, ou disposer
+chacune du sien : tâches, lecture, rédaction, quelle que soit l'ontologie que
+vous vous donnerez.
+
 *This README is also available in English: [README.md](README.md).*
 
-Application macOS de barre de menus qui relie Apple Rappels et Apple Calendrier :
-elle surveille en temps réel les calendriers de votre choix et inscrit, dans la
-description de chaque nouvelle session, les propriétés de la tâche
-correspondante et le cumul des séances déjà consacrées au même travail.
-
-L'identifiant de bundle reste `fr.equiriconi.SessionsStats`, nom que portait
-l'application à ses débuts : il est ce à quoi macOS rattache les autorisations
-Calendrier et Rappels, les réglages et l'état des événements déjà traités. Le
-changer les remettrait tous à zéro.
-
-Pas de scrutation périodique : l'application reste éveillée et s'abonne à la
-notification système `EKEventStoreChanged`, émise à chaque modification de la
-base Calendrier ou Rappels — y compris quand un événement créé sur iPhone
-achève de se synchroniser sur le Mac.
+> L'identifiant de bundle reste `fr.equiriconi.SessionsStats`, nom que portait
+> l'application à ses débuts : il est ce à quoi macOS rattache les autorisations
+> Calendrier et Rappels, les réglages et l'état des événements déjà traités. Le
+> changer les remettrait tous à zéro.
 
 ## Installation
 
