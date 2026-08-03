@@ -273,10 +273,12 @@ final class Engine {
         isScanning = true
         let snapshot = config
         let stateSnapshot = state
+        // Premier passage après lancement : `nil`, donc examen complet.
+        let previousScan = lastScanDate
 
         scanQueue.async { [weak self] in
             guard let self else { return }
-            let result = self.performScan(config: snapshot, state: stateSnapshot)
+            let result = self.performScan(config: snapshot, state: stateSnapshot, since: previousScan)
             Task { @MainActor in
                 self.state.bootstrapped = true
                 self.state.seen.formUnion(result.seen)
@@ -284,7 +286,7 @@ final class Engine {
                 self.state.records.merge(result.records) { _, new in new }
                 self.saveState()
                 self.processedCount = self.state.seen.count
-                self.lastScanDate = Date()
+                if result.complete { self.lastScanDate = Date() }
                 self.isScanning = false
                 for line in result.messages { self.log(line) }
                 for item in result.unresolved where self.reportedUnresolved.insert(item.id).inserted {
@@ -308,6 +310,10 @@ final class Engine {
         /// Événements sans tâche identifiable, remontés pour être signalés une
         /// seule fois plutôt qu'à chaque passage.
         var unresolved: [(id: String, title: String, lists: String)] = []
+        /// Faux si le passage n'est pas allé à son terme. La date du dernier
+        /// passage ne doit alors pas avancer, sans quoi les changements
+        /// survenus entre-temps seraient écartés au passage suivant.
+        var complete = true
         var summary: String?
     }
 
@@ -332,7 +338,8 @@ final class Engine {
         return collected
     }
 
-    private nonisolated func performScan(config: Config, state: PersistedState) -> ScanResult {
+    private nonisolated func performScan(config: Config, state: PersistedState,
+                                         since: Date?) -> ScanResult {
         var result = ScanResult()
         store.refreshSourcesIfNecessary()
 
@@ -359,6 +366,7 @@ final class Engine {
                 result.messages.append(L.t("Lecture des rappels interrompue : passage abandonné, rien n'a été touché.",
                                            "Reading reminders failed: pass abandoned, nothing was touched."))
                 result.summary = L.t("Lecture des rappels interrompue.", "Reading reminders failed.")
+                result.complete = false
                 return result
             }
             // Triées du titre le plus long au plus court : en correspondance
@@ -441,8 +449,34 @@ final class Engine {
             return fetched
         }
 
+        // Ce qui a bougé depuis le dernier passage. Une séance dépendant de ses
+        // voisines, c'est la tâche entière qu'il faut reprendre, pas seulement
+        // l'événement modifié.
+        var touched: Set<String> = []
+        if let since {
+            for task in allTasks where (task.reminder.lastModifiedDate ?? .distantFuture) > since {
+                touched.insert(task.id)
+            }
+            for (_, calendarEvents, _) in pending {
+                for event in calendarEvents
+                where (event.lastModifiedDate ?? .distantFuture) > since {
+                    // Rattachement au moindre coût : aucune séance n'est
+                    // recalculée à ce stade.
+                    if let id = Self.taskID(inLocation: event.location) {
+                        touched.insert(id)
+                    } else if let eventID = event.eventIdentifier,
+                              let known = state.records[eventID]?.reminderId {
+                        touched.insert(known)
+                    }
+                }
+            }
+        }
+
         var written = 0
         var moved = 0
+        /// Enregistrements en attente de validation, consignés seulement si la
+        /// transaction aboutit.
+        var pendingRecords: [String: EventRecord] = [:]
         for (pairing, calendarEvents, stray) in pending {
             let ownTasks = allTasks.filter {
                 pairing.reminderListNames.contains($0.reminder.calendar?.title ?? "")
@@ -489,6 +523,16 @@ final class Engine {
                             }
                         }
                     }
+                }
+
+                // Rien n'a bougé de ce côté : on reconduit l'enregistrement
+                // existant sans recalculer ses séances ni son empreinte.
+                if let since, let record = state.records[id],
+                   !touched.contains(record.reminderId),
+                   (event.lastModifiedDate ?? .distantFuture) <= since {
+                    result.seen.append(id)
+                    result.records[id] = record
+                    continue
                 }
 
                 guard let task else {
@@ -564,8 +608,26 @@ final class Engine {
                 }
                 // Le déplacement peut changer l'identifiant de l'événement.
                 let finalID = event.eventIdentifier ?? id
-                result.seen.append(finalID)
-                result.records[finalID] = EventRecord(reminderId: task.id, fingerprint: fingerprint)
+                pendingRecords[finalID] = EventRecord(reminderId: task.id, fingerprint: fingerprint)
+            }
+        }
+
+        // Une seule validation pour tout le lot. Si elle échoue, rien n'est
+        // consigné : les événements restent candidats, plutôt que d'être tenus
+        // pour écrits sans l'avoir été.
+        if written > 0 {
+            do {
+                try store.commit()
+                for (id, record) in pendingRecords {
+                    result.seen.append(id)
+                    result.records[id] = record
+                }
+            } catch {
+                store.reset()
+                result.messages.append(L.t("Validation impossible : \(error.localizedDescription). Rien n'a été enregistré, le passage suivant reprendra.",
+                                           "Commit failed: \(error.localizedDescription). Nothing was recorded; the next pass will retry."))
+                result.complete = false
+                written = 0
             }
         }
 
@@ -837,7 +899,10 @@ final class Engine {
         }
 
         do {
-            try store.save(event, span: .thisEvent, commit: true)
+            // Sans validation : tout le lot est validé en une fois à la fin du
+            // passage. Dix enregistrements ne produisent alors qu'une écriture
+            // et une notification, au lieu de dix de chaque.
+            try store.save(event, span: .thisEvent, commit: false)
             return L.t("Écrit : « \(displayTitle) » — session n°\(previous.count + 1) sur \(sessions.count) séance(s)",
                        "Written: “\(displayTitle)” — session #\(previous.count + 1) of \(sessions.count) session(s)")
         } catch {
