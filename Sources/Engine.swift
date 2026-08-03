@@ -513,11 +513,13 @@ final class Engine {
                                             history: history(of: effective.calendarName),
                                             records: state.records, pairing: effective)
                 let formatStamp = effective.formatFingerprint + "\u{3}" + appVersion
-                // Les horaires des séances entrent dans l'empreinte : allonger un
-                // créneau réécrit sa propre durée et le cumul de ceux qui suivent.
+                // Les horaires entrent dans l'empreinte, mais seulement ceux dont
+                // cet événement dépend : allonger un créneau réécrit sa propre
+                // durée et le cumul des séances qui le suivent, sans toucher aux
+                // précédentes.
                 let fingerprint = ReminderDetails.fingerprint(for: task.reminder)
                     + "\u{3}" + formatStamp
-                    + "\u{3}" + Self.sessionsFingerprint(taskSessions)
+                    + "\u{3}" + Self.statisticsFingerprint(of: event, among: taskSessions)
                 let record = state.records[id]
                 let isNew = record == nil && !state.seen.contains(id)
                 let changed = record != nil && record?.fingerprint != fingerprint
@@ -635,16 +637,29 @@ final class Engine {
         }
     }
 
-    /// Empreinte des horaires de toutes les séances d'une tâche. Sans elle,
-    /// redimensionner un créneau ne réécrirait rien : ni sa propre durée, ni le
-    /// cumul des séances qui le suivent.
-    private nonisolated static func sessionsFingerprint(_ events: [EKEvent]) -> String {
-        events.compactMap { event -> String? in
-            guard let start = event.startDate, let end = event.endDate else { return nil }
-            return "\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))"
-        }
-        .sorted()
-        .joined(separator: ",")
+    private nonisolated static func stamp(_ event: EKEvent) -> String? {
+        guard let start = event.startDate, let end = event.endDate else { return nil }
+        return "\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))"
+    }
+
+    /// Ce dont les statistiques d'un événement dépendent vraiment : ses propres
+    /// horaires, et ceux des séances qui s'achèvent avant son début. Rien
+    /// d'autre n'entre dans le calcul.
+    ///
+    /// Y inclure les séances postérieures ferait réécrire tout l'historique
+    /// d'une tâche à chaque nouveau créneau, alors qu'aucun de ces événements
+    /// n'aurait changé de contenu.
+    private nonisolated static func statisticsFingerprint(of event: EKEvent,
+                                                          among sessions: [EKEvent]) -> String {
+        let start = event.startDate ?? .distantPast
+        let earlier = sessions
+            .filter {
+                $0.eventIdentifier != event.eventIdentifier
+                    && ($0.endDate ?? .distantPast) <= start
+            }
+            .compactMap(stamp)
+            .sorted()
+        return ([stamp(event) ?? ""] + earlier).joined(separator: ",")
     }
 
     private nonisolated func fetchTasks(listNames: [String], into result: inout ScanResult) -> [TaskTitle] {
