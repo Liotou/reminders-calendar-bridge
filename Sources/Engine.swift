@@ -73,6 +73,10 @@ final class Engine {
     private var state = PersistedState()
     private var observer: NSObjectProtocol?
     private var debounce: DispatchWorkItem?
+    /// Événements sans tâche identifiable déjà signalés. En mémoire seulement :
+    /// les consigner sur disque les écarterait durablement, alors qu'ils doivent
+    /// rester candidats si la lecture des rappels échouait ce jour-là.
+    private var reportedUnresolved: Set<String> = []
 
     private static let appSupport = FileManager.default
         .homeDirectoryForCurrentUser
@@ -276,12 +280,17 @@ final class Engine {
             Task { @MainActor in
                 self.state.bootstrapped = true
                 self.state.seen.formUnion(result.seen)
+                self.reportedUnresolved.subtract(result.seen)
                 self.state.records.merge(result.records) { _, new in new }
                 self.saveState()
                 self.processedCount = self.state.seen.count
                 self.lastScanDate = Date()
                 self.isScanning = false
                 for line in result.messages { self.log(line) }
+                for item in result.unresolved where self.reportedUnresolved.insert(item.id).inserted {
+                    self.log(L.t("Ignoré : « \(item.title) » n'est une tâche d'aucune des listes : \(item.lists).",
+                                 "Skipped: “\(item.title)” is not a task in any of: \(item.lists)."))
+                }
                 if let summary = result.summary { self.lastActivity = summary }
             }
         }
@@ -290,9 +299,15 @@ final class Engine {
     // MARK: - Analyse (hors thread principal)
 
     private struct ScanResult {
+        /// Uniquement les événements réellement pris en charge : écrits, ou
+        /// constatés à jour. Un événement examiné sans avoir pu être rattaché
+        /// à sa tâche n'y figure pas — il doit rester candidat.
         var seen: [String] = []
         var records: [String: EventRecord] = [:]
         var messages: [String] = []
+        /// Événements sans tâche identifiable, remontés pour être signalés une
+        /// seule fois plutôt qu'à chaque passage.
+        var unresolved: [(id: String, title: String, lists: String)] = []
         var summary: String?
     }
 
@@ -338,10 +353,17 @@ final class Engine {
         var allTasks: [TaskTitle] = []
         var tasksById: [String: TaskTitle] = [:]
         if !allListNames.isEmpty {
+            guard let fetched = fetchTasks(listNames: allListNames, into: &result) else {
+                // Abandon avant d'avoir rien marqué ni enregistré : le passage
+                // suivant reprendra tout, intact.
+                result.messages.append(L.t("Lecture des rappels interrompue : passage abandonné, rien n'a été touché.",
+                                           "Reading reminders failed: pass abandoned, nothing was touched."))
+                result.summary = L.t("Lecture des rappels interrompue.", "Reading reminders failed.")
+                return result
+            }
             // Triées du titre le plus long au plus court : en correspondance
             // souple, la tâche la plus spécifique doit l'emporter.
-            allTasks = fetchTasks(listNames: allListNames, into: &result)
-                .sorted { $0.normalized.count > $1.normalized.count }
+            allTasks = fetched.sorted { $0.normalized.count > $1.normalized.count }
             for task in allTasks { tasksById[task.id] = task }
         }
 
@@ -428,7 +450,6 @@ final class Engine {
 
             for event in calendarEvents {
                 guard let id = event.eventIdentifier else { continue }
-                result.seen.append(id)
 
                 // Rattachement à la tâche, du plus fiable au plus approximatif.
                 // Le lien inscrit dans le lieu survit à un changement de titre du
@@ -471,10 +492,10 @@ final class Engine {
                 }
 
                 guard let task else {
-                    if !stray, !pairing.reminderListNames.isEmpty,
-                       state.records[id] == nil, !state.seen.contains(id) {
-                        result.messages.append(L.t("Ignoré : « \(Self.firstLine(event.title)) » n'est une tâche d'aucune des listes : \(pairing.listsSummary).",
-                                                   "Skipped: “\(Self.firstLine(event.title))” is not a task in any of: \(pairing.listsSummary)."))
+                    // Ni marqué vu ni enregistré : si la tâche existe mais n'a
+                    // pas pu être lue cette fois, l'événement sera repris.
+                    if !stray, !pairing.reminderListNames.isEmpty {
+                        result.unresolved.append((id, Self.firstLine(event.title), pairing.listsSummary))
                     }
                     continue
                 }
@@ -531,6 +552,7 @@ final class Engine {
                 let relocated = effective.calendarName != pairing.calendarName
 
                 guard isNew || changed || staleLink || relocated else {
+                    result.seen.append(id)
                     result.records[id] = EventRecord(reminderId: task.id, fingerprint: fingerprint)
                     continue
                 }
@@ -662,7 +684,12 @@ final class Engine {
         return ([stamp(event) ?? ""] + earlier).joined(separator: ",")
     }
 
-    private nonisolated func fetchTasks(listNames: [String], into result: inout ScanResult) -> [TaskTitle] {
+    /// Rend `nil` si la lecture a échoué — expiration du délai, ou erreur
+    /// d'EventKit. Un tableau vide signifie « ces listes ne contiennent aucune
+    /// tâche », ce qui n'est pas la même chose : confondre les deux revient à
+    /// prendre une panne pour un fait, et à écarter des événements parfaitement
+    /// valides.
+    private nonisolated func fetchTasks(listNames: [String], into result: inout ScanResult) -> [TaskTitle]? {
         let available = store.calendars(for: .reminder)
         let lists = listNames.compactMap { name in
             available.first { $0.title == name }
@@ -673,16 +700,19 @@ final class Engine {
         }
         guard !lists.isEmpty else { return [] }
 
-        var tasks: [TaskTitle] = []
+        var fetched: [TaskTitle]?
         let semaphore = DispatchSemaphore(value: 0)
         store.fetchReminders(matching: store.predicateForReminders(in: lists)) { reminders in
-            tasks = (reminders ?? []).map {
-                TaskTitle(normalized: Self.normalize($0.title), original: $0.title ?? "", reminder: $0)
+            // `nil` ici signale une erreur, pas une absence de rappels.
+            if let reminders {
+                fetched = reminders.map {
+                    TaskTitle(normalized: Self.normalize($0.title), original: $0.title ?? "", reminder: $0)
+                }
             }
             semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 20)
-        return tasks
+        guard semaphore.wait(timeout: .now() + 20) == .success else { return nil }
+        return fetched
     }
 
     // MARK: - Identifiant de tâche inscrit dans la note
